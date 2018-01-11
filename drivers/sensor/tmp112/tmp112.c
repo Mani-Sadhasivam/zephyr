@@ -41,12 +41,12 @@ static int tmp112_reg_read(struct tmp112_data *drv_data,
 		{
 			.buf = &reg,
 			.len = 1,
-			.flags = I2C_MSG_WRITE | I2C_MSG_RESTART,
+			.flags = I2C_MSG_WRITE,
 		},
 		{
 			.buf = (u8_t *)val,
 			.len = 2,
-			.flags = I2C_MSG_READ | I2C_MSG_STOP,
+			.flags = I2C_MSG_RESTART | I2C_MSG_READ | I2C_MSG_STOP,
 		},
 	};
 
