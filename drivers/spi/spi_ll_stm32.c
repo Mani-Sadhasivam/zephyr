@@ -329,7 +329,9 @@ static int spi_stm32_configure(struct device *dev,
 #endif
 
 #ifndef CONFIG_SOC_SERIES_STM32F1X
+#ifndef CONFIG_SOC_SERIES_STM32L1X
 	LL_SPI_SetStandard(spi, LL_SPI_PROTOCOL_MOTOROLA);
+#endif
 #endif
 
 	/* At this point, it's mandatory to set this on the context! */

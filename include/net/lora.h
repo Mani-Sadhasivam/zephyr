@@ -1,0 +1,63 @@
+/*
+ * Copyright (c) 2019 Linaro Limited
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#ifndef ZEPHYR_INCLUDE_NET_LORA_H_
+#define ZEPHYR_INCLUDE_NET_LORA_H_
+
+#include <net/net_app.h>
+
+enum lora_devices_t {
+	LORA_GATEWAY,
+	LORA_CLASS_A_NODE,
+	LORA_CLASS_B_NODE,
+	LORA_CLASS_C_NODE,
+};
+
+enum lora_regions_t {
+	LORA_EU863_870,
+	LORA_US902_928,
+	LORA_CN779_787,
+	LORA_EU443,
+	LORA_AU915_928,
+	LORA_CN470_510,
+	LORA_AS923,
+	LORA_KR920_923,
+	LORA_IND865_867,
+	LORA_MAX_REGION,
+};
+
+enum lora_type_t {
+	LORA_LORA,
+	LORA_FSK,
+};
+
+#define	LORA_UPLINK		0
+#define	LORA_DOWNLINK		1
+
+/* List the message types of LoRaWAN */
+enum lora_msg_t {
+	LORA_JOIN_REQUEST,
+	LORA_JOIN_ACCEPT,
+	LORA_UNCONFIRMED_DATA_UP,
+	LORA_UNCONFIRMED_DATA_DOWN,
+	LORA_CONFIRMED_DATA_UP,
+	LORA_CONFIRMED_DATA_DOWN,
+	LORA_RFU,
+	LORA_PROPRIETARY,
+};
+
+enum lora_state_t {
+	LORA_STOP,
+	LORA_START,
+	LORA_STATE_IDLE,
+	LORA_STATE_TX,
+	LORA_STATE_RX,
+	LORA_STATE_CAD,
+};
+
+int lora_send();
+
+#endif /* ZEPHYR_INCLUDE_NET_LORA_H_ */
