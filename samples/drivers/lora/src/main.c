@@ -28,9 +28,9 @@ void main(void)
 		return;
 	}
 
-	config.frequency = 868000000;
+	config.frequency = 865985000;
 	config.bandwidth = BW_125_KHZ;
-	config.spreading_factor = SF_7;
+	config.spreading_factor = SF_8;
 	config.tx_power = 17;
 
 	ret = lora_config(lora_dev, &config);
