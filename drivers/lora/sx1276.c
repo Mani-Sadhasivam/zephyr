@@ -43,6 +43,7 @@ LOG_MODULE_REGISTER(sx1276);
 #define SX1276_OPMODE_MODE_RXSINGLE		(0x6 << 0)
 
 #define SX1276_MODEM_CONFIG1_BW_MASK		GENMASK(7, 4)
+#define SX1276_MODEM_CONFIG1_CR_MASK		GENMASK(3, 1)
 #define SX1276_MODEM_CONFIG2_SF_MASK		GENMASK(7, 4)
 #define SX1276_PA_CONFIG_PA_BOOST		BIT(7)
 
@@ -50,9 +51,9 @@ LOG_MODULE_REGISTER(sx1276);
 
 #define REG_DIO_MAPPING1_DIO0_MASK	GENMASK(7, 6)
 
-#define GPIO_RESET_PIN			DT_SEMTECH_SX1276_0_RESET_GPIOS_PIN
-#define GPIO_CS_PIN			DT_SEMTECH_SX1276_0_CS_GPIO_PIN
-#define CLOCK_FREQ			DT_SEMTECH_SX1276_0_CLOCK_FREQUENCY
+#define GPIO_RESET_PIN			DT_INST_0_SEMTECH_SX1276_RESET_GPIOS_PIN
+#define GPIO_CS_PIN			DT_INST_0_SEMTECH_SX1276_CS_GPIO_PIN
+#define CLOCK_FREQ			DT_INST_0_SEMTECH_SX1276_CLOCK_FREQUENCY
 
 #define SX1276_PA_RFO				0
 #define SX1276_PA_BOOST				1
@@ -153,21 +154,21 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 		return -EIO;
 	}
 
-	ret = sx1276_read(dev, SX1276_REG_FIFO_TX_BASE_ADDR, &fifo_ptr, 1);
+	ret = sx1276_write(dev, SX1276_REG_PAYLOAD_LENGTH, data_len);
+	if (ret < 0) {
+		LOG_ERR("Unable to write payload length");
+		return -EIO;
+	}
+
+	ret = sx1276_write(dev, SX1276_REG_FIFO_TX_BASE_ADDR, 0);
 	if (ret < 0) {
 		LOG_ERR("Unable to read FIFO Tx base addr");
 		return -EIO;
 	}
 
-	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, fifo_ptr);
+	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, 0);
 	if (ret < 0) {
 		LOG_ERR("Unable to write FIFO Tx addr pointer");
-		return -EIO;
-	}
-
-	ret = sx1276_write(dev, SX1276_REG_PAYLOAD_LENGTH, data_len);
-	if (ret < 0) {
-		LOG_ERR("Unable to write payload length");
 		return -EIO;
 	}
 
@@ -199,19 +200,12 @@ static int sx1276_lora_config(struct device *dev,
 	int ret;
 	u8_t regval, pa_config;
 
-	/* Set LoRa and enter sleep mode */
-	regval = SX1276_OPMODE_LONG_RANGE_MODE | SX1276_OPMODE_MODE_SLEEP;
-	ret = sx1276_write(dev, SX1276_REG_OPMODE, regval); 
-	if (ret < 0) {
-		LOG_ERR("Unable to write OPMODE");
-		return -EIO;
-	}
-
 	/* Set frequency */		
 	freq_rf = config->frequency;;
-	freq_rf *= (1 << 19);
-	freq_rf /= CLOCK_FREQ;
-	LOG_INF("FRF: %x", (unsigned int) freq_rf);
+//	freq_rf *= (1 << 19);
+//	freq_rf /= CLOCK_FREQ;
+	freq_rf = ( uint32_t )( ( double )freq_rf / ( double ) 61.03515625);
+	LOG_INF("freq: %u", (unsigned int) freq_rf);
 
 	ret = sx1276_write(dev, SX1276_REG_FRF_MSB, (freq_rf >> 16 & 0xFF));
 	if (!ret)
@@ -223,45 +217,38 @@ static int sx1276_lora_config(struct device *dev,
 		return -EIO;
 	}
 
-	switch (config->bandwidth) {
-	case BW_125_KHZ:
-	case BW_250_KHZ:
-	case BW_500_KHZ:
-		break;
-	default:
-		LOG_ERR("Bandwidth not supported");
-		return -EINVAL;
-	}
-
-	/* Set bandwidth */
-	ret = sx1276_read(dev, SX1276_REG_MODEM_CONFIG1, &regval, 1);
+	/* TODO: Set antenna pins to sleep mode */
+	/* Enter sleep mode */
+	ret = sx1276_read(dev, SX1276_REG_OPMODE, &regval, 1);
 	if (ret < 0) {
-		LOG_ERR("Unable to read Modem Config1");
+		LOG_ERR("Unable to read OPMODE");
 		return -EIO;
 	}
 
-	regval &= ~SX1276_MODEM_CONFIG1_BW_MASK;
-	regval |= (config->bandwidth << 4);
-	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG1, regval); 
+	regval &= ~SX1276_OPMODE_MODE_MASK;
+	regval |= SX1276_OPMODE_MODE_SLEEP;
+	ret = sx1276_write(dev, SX1276_REG_OPMODE, regval); 
 	if (ret < 0) {
-		LOG_ERR("Unable to write Modem Config1");
+		LOG_ERR("Unable to write OPMODE");
 		return -EIO;
 	}
 
-	/* Set spreading factor */
-	ret = sx1276_read(dev, SX1276_REG_MODEM_CONFIG2, &regval, 1);
+	/* Set LoRa mode */
+	ret = sx1276_read(dev, SX1276_REG_OPMODE, &regval, 1);
 	if (ret < 0) {
-		LOG_ERR("Unable to read Modem Config2");
+		LOG_ERR("Unable to read OPMODE");
 		return -EIO;
 	}
 
-	regval &= ~SX1276_MODEM_CONFIG2_SF_MASK;
-	regval |= (config->spreading_factor << 4);
-	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG2, regval); 
+	regval |= SX1276_OPMODE_LONG_RANGE_MODE;
+	ret = sx1276_write(dev, SX1276_REG_OPMODE, regval); 
 	if (ret < 0) {
-		LOG_ERR("Unable to write Modem Config2");
+		LOG_ERR("Unable to write OPMODE");
 		return -EIO;
 	}
+
+	sx1276_write(dev, SX1276_REG_DIO_MAPPING1, 0x00); 
+	sx1276_write(dev, SX1276_REG_DIO_MAPPING2, 0x00);
 
 	/* Set output power */
 	ret = sx1276_read(dev, SX1276_REG_PA_CONFIG, &pa_config, 1);
@@ -307,6 +294,47 @@ static int sx1276_lora_config(struct device *dev,
 		return -EIO;
 	}
 
+	switch (config->bandwidth) {
+	case BW_125_KHZ:
+	case BW_250_KHZ:
+	case BW_500_KHZ:
+		break;
+	default:
+		LOG_ERR("Bandwidth not supported");
+		return -EINVAL;
+	}
+
+	/* Set bandwidth */
+	ret = sx1276_read(dev, SX1276_REG_MODEM_CONFIG1, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read Modem Config1");
+		return -EIO;
+	}
+
+	regval &= ~SX1276_MODEM_CONFIG1_BW_MASK;
+	regval &= ~SX1276_MODEM_CONFIG1_CR_MASK;
+	regval |= (config->bandwidth << 4);
+	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG1, regval); 
+	if (ret < 0) {
+		LOG_ERR("Unable to write Modem Config1");
+		return -EIO;
+	}
+
+	/* Set spreading factor */
+	ret = sx1276_read(dev, SX1276_REG_MODEM_CONFIG2, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read Modem Config2");
+		return -EIO;
+	}
+
+	regval &= ~SX1276_MODEM_CONFIG2_SF_MASK;
+	regval |= (config->spreading_factor << 4);
+	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG2, regval); 
+	if (ret < 0) {
+		LOG_ERR("Unable to write Modem Config2");
+		return -EIO;
+	}
+
 	return 0;
 }
 
@@ -318,33 +346,33 @@ static int sx1276_lora_init(struct device *dev)
 	int ret;
 	u8_t regval;
 
-	data->spi = device_get_binding(DT_SEMTECH_SX1276_0_BUS_NAME);
+	data->spi = device_get_binding(DT_INST_0_SEMTECH_SX1276_BUS_NAME);
 	if (!data->spi) {
 		LOG_ERR("spi device not found: %s",
-			    DT_SEMTECH_SX1276_0_BUS_NAME);
+			    DT_INST_0_SEMTECH_SX1276_BUS_NAME);
 		return -EINVAL;
 	}
 
 	data->spi_cfg.operation = SPI_WORD_SET(8) | SPI_TRANSFER_MSB;
-	data->spi_cfg.frequency = DT_SEMTECH_SX1276_0_SPI_MAX_FREQUENCY;
-	data->spi_cfg.slave = DT_SEMTECH_SX1276_0_BASE_ADDRESS;
+	data->spi_cfg.frequency = DT_INST_0_SEMTECH_SX1276_SPI_MAX_FREQUENCY;
+	data->spi_cfg.slave = DT_INST_0_SEMTECH_SX1276_BASE_ADDRESS;
 
 	spi_cs.gpio_pin = GPIO_CS_PIN,
 	spi_cs.gpio_dev = device_get_binding(
-			DT_SEMTECH_SX1276_0_CS_GPIO_CONTROLLER);
+			DT_INST_0_SEMTECH_SX1276_CS_GPIO_CONTROLLER);
 	if (!spi_cs.gpio_dev) {
 		LOG_ERR("Failed to initialize CS GPIO driver: %s",
-		       DT_SEMTECH_SX1276_0_CS_GPIO_CONTROLLER);
+		       DT_INST_0_SEMTECH_SX1276_CS_GPIO_CONTROLLER);
 		return -EIO;
 	}
 
 	data->spi_cfg.cs = &spi_cs;
 
 	reset_dev = device_get_binding(
-			DT_SEMTECH_SX1276_0_RESET_GPIOS_CONTROLLER);
+			DT_INST_0_SEMTECH_SX1276_RESET_GPIOS_CONTROLLER);
 	if (!reset_dev) {
 		LOG_ERR("Failed to initialize Reset GPIO driver: %s",
-		       DT_SEMTECH_SX1276_0_RESET_GPIOS_CONTROLLER);
+		       DT_INST_0_SEMTECH_SX1276_RESET_GPIOS_CONTROLLER);
 		return -EIO;
 	}
 
@@ -374,7 +402,7 @@ static const struct lora_driver_api sx1276_lora_api = {
 	.send = sx1276_lora_send,
 };
 
-DEVICE_AND_API_INIT(sx1276_lora, DT_SEMTECH_SX1276_0_LABEL,
+DEVICE_AND_API_INIT(sx1276_lora, DT_INST_0_SEMTECH_SX1276_LABEL,
 		    &sx1276_lora_init, &sx1276_lora_data,
 		    NULL, POST_KERNEL, CONFIG_LORA_INIT_PRIORITY,
 		    &sx1276_lora_api);

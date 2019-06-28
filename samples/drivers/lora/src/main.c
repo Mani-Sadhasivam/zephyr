@@ -12,7 +12,7 @@
 
 #define LOG_LEVEL CONFIG_LOG_DEFAULT_LEVEL
 #include <logging/log.h>
-LOG_MODULE_REGISTER(log);
+LOG_MODULE_REGISTER(lora_log);
 
 char data[13] = "Sending data";
 
@@ -22,9 +22,9 @@ void main(void)
 	struct lora_modem_config config;
 	int ret;
 
-	lora_dev = device_get_binding(DT_SEMTECH_SX1276_0_LABEL);
+	lora_dev = device_get_binding(DT_INST_0_SEMTECH_SX1276_LABEL);
 	if (!lora_dev) {
-		LOG_ERR("%s Device not found", DT_SEMTECH_SX1276_0_LABEL);
+		LOG_ERR("%s Device not found", DT_INST_0_SEMTECH_SX1276_LABEL);
 		return;
 	}
 

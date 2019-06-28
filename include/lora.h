@@ -40,9 +40,9 @@ enum lora_spreading_factor {
 
 struct lora_modem_config {
 	u32_t frequency;
-	u32_t bandwidth : 4;
-	u32_t spreading_factor : 3;
-	u32_t tx_power;
+	int bandwidth;
+	int spreading_factor;
+	int tx_power;
 };
 
 /**
