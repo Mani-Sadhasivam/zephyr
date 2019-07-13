@@ -4,9 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <kernel.h>
 #include <device.h>
+#include <gpio.h>
 #include <init.h>
+#include <kernel.h>
 #include <pinmux.h>
 #include <sys_io.h>
 
@@ -30,6 +31,11 @@ static const struct pin_config pinconf[] = {
 	{STM32_PIN_PA6, STM32L1X_PINMUX_FUNC_PA6_SPI1_MISO},
 	{STM32_PIN_PA7, STM32L1X_PINMUX_FUNC_PA7_SPI1_MOSI},
 #endif /* CONFIG_SPI_1 */
+	{STM32_PIN_PA4, STM32_PUSHPULL_PULLUP},
+	{STM32_PIN_PA11, STM32_PUSHPULL_PULLUP},
+	{STM32_PIN_PB6, STM32_PUSHPULL_PULLUP},
+	{STM32_PIN_PB7, STM32_PUSHPULL_PULLUP},
+//	{STM32_PIN_PH1, STM32_PUSHPULL_NOPULL},
 };
 
 static int pinmux_stm32_init(struct device *port)
@@ -38,8 +44,26 @@ static int pinmux_stm32_init(struct device *port)
 
 	stm32_setup_pins(pinconf, ARRAY_SIZE(pinconf));
 
+	struct device *gpioa =
+	       device_get_binding(DT_ST_STM32_GPIO_40020000_LABEL);
+	struct device *gpiob =
+	       device_get_binding(DT_ST_STM32_GPIO_40020400_LABEL);
+	struct device *gpioh =
+	       device_get_binding(DT_ST_STM32_GPIO_40021400_LABEL);
+
+	gpio_pin_configure(gpioa, 4, GPIO_DIR_OUT);
+	gpio_pin_write(gpioa, 4, 1);
+
+	gpio_pin_configure(gpiob, 6, GPIO_DIR_OUT);
+	gpio_pin_write(gpiob, 6, 0);
+
+	gpio_pin_configure(gpiob, 7, GPIO_DIR_OUT);
+	gpio_pin_write(gpiob, 6, 0);
+
+	gpio_pin_configure(gpioh, 1, GPIO_DIR_OUT);
+	gpio_pin_write(gpioh, 1, 1);
+
 	return 0;
 }
 
-SYS_INIT(pinmux_stm32_init, PRE_KERNEL_1,
-	 CONFIG_PINMUX_STM32_DEVICE_INITIALIZATION_PRIORITY);
+SYS_INIT(pinmux_stm32_init, PRE_KERNEL_1, CONFIG_PINMUX_STM32_DEVICE_INITIALIZATION_PRIORITY);

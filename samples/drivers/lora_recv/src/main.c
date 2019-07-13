@@ -14,7 +14,7 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(lora_log);
 
-char data[13] = {0,1,2,3,4,5,6,7,8,9,10,11,12};
+char data[13];
 
 void main(void)
 {
@@ -31,7 +31,7 @@ void main(void)
 	config.frequency = 868100000;
 	config.bandwidth = BW_125_KHZ;
 	config.spreading_factor = SF_10;
-	config.tx_power = 4;
+	config.tx_power = 14;
 
 	ret = lora_config(lora_dev, &config);
 	if (ret < 0) {
@@ -39,16 +39,17 @@ void main(void)
 		return;
 	}
 
-//	while (1) {
-		LOG_INF("sending");
-		ret = lora_send(lora_dev, data, 13);
+	while (1) {
+		LOG_INF("receiving");
+		ret = lora_recv(lora_dev, data, 13);
 		if (ret < 0) {
 			LOG_ERR("LoRa send failed");
 			return;
 		}
 
+		LOG_INF("Received data: %d %d", data[0], data[1]);
 		k_sleep(2000);
-//	}
+	}
 
 	while(1);
 }

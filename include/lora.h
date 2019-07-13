@@ -63,9 +63,19 @@ typedef int (*lora_api_config)(struct device *dev,
 typedef int (*lora_api_send)(struct device *dev,
 			     u8_t *data, u32_t data_len);
 
+/**
+ * @typedef lora_api_recv()
+ * @brief Callback API for receiving data over LoRa
+ *
+ * @see lora_recv() for argument descriptions.
+ */
+typedef int (*lora_api_recv)(struct device *dev,
+			     u8_t *data, u32_t data_len);
+
 struct lora_driver_api {
 	lora_api_config config;
 	lora_api_send	send;
+	lora_api_recv	recv;
 };
 
 /**
@@ -102,6 +112,24 @@ static inline int lora_send(struct device *dev,
 	const struct lora_driver_api *api = dev->driver_api;
 
 	return api->send(dev, data, data_len);
+}
+
+/**
+ * @brief Receive data over LoRa
+ *
+ * This routine receives data over LoRa
+ *
+ * @param dev       LoRa device
+ * @param data      Buffer to hold received data
+ * @param data_len  Length of the data to be received 
+ * @return 0 on success, negative on error
+ */
+static inline int lora_recv(struct device *dev,
+			    u8_t *data, u32_t data_len)
+{
+	const struct lora_driver_api *api = dev->driver_api;
+
+	return api->recv(dev, data, data_len);
 }
 
 #endif	/* ZEPHYR_INCLUDE_LORA_H_ */

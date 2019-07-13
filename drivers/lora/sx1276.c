@@ -20,13 +20,20 @@ LOG_MODULE_REGISTER(sx1276);
 #define SX1276_REG_FRF_MID			0x07
 #define SX1276_REG_FRF_LSB			0x08
 #define SX1276_REG_PA_CONFIG			0x09
+#define SX1276_REG_LNA				0x0c
 #define SX1276_REG_FIFO_ADDR_PTR		0x0d
 #define SX1276_REG_FIFO_TX_BASE_ADDR		0x0e
+#define SX1276_REG_FIFO_RX_BASE_ADDR		0x0f
+#define SX1276_REG_FIFO_RX_CUR_ADDR		0x10
 #define SX1276_REG_IRQ_FLAGS_MASK		0x11
 #define SX1276_REG_IRQ_FLAGS			0x12
+#define SX1276_REG_RX_NB_BYTES			0x13
 #define SX1276_REG_MODEM_CONFIG1		0x1d
 #define SX1276_REG_MODEM_CONFIG2		0x1e
+#define SX1276_REG_PREAMBLE_MSB			0x20
+#define SX1276_REG_PREAMBLE_LSB			0x21
 #define SX1276_REG_PAYLOAD_LENGTH		0x22
+#define SX1276_REG_MODEM_CONFIG3		0x26
 #define SX1276_REG_SYNC_WORD			0x39
 #define SX1276_REG_DIO_MAPPING1			0x40
 #define SX1276_REG_DIO_MAPPING2			0x41
@@ -137,51 +144,61 @@ int sx1276_fifo_write(struct device *dev, u8_t *data, u32_t data_len)
 	return 0;
 }
 
-static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
+int sx1276_fifo_read(struct device *dev, u8_t *data, u32_t data_len)
+{
+	int ret, i;
+
+	for (i = 0; i < data_len; i++) {
+		ret = sx1276_read(dev, SX1276_REG_FIFO, &data[i], 1);
+		if (ret < 0) {
+			LOG_ERR("Unable to read FIFO");
+			return -EIO;
+		}
+	}
+
+	return 0;
+}
+
+static int sx1276_lora_recv(struct device *dev, u8_t *data, u32_t data_len)
 {
 	int ret;
-	u8_t regval, fifo_ptr;
+	u8_t regval, loc;
+	
+	/* fix */
+	ret = sx1276_write(dev, SX1276_REG_IRQ_FLAGS, 0xFF);
+	if (ret < 0) {
+		LOG_ERR("Unable to write IRQ_FLAGS");
+		return -EIO;
+	}
 
-	/* Set standby mode */
+	ret = sx1276_read(dev, SX1276_REG_DIO_MAPPING1, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read DIO_MAPPING1");
+		return -EIO;
+	}
+
+	regval &= ~REG_DIO_MAPPING1_DIO0_MASK;
+	ret = sx1276_write(dev, SX1276_REG_DIO_MAPPING1, 0x00);//fix
+	if (ret < 0) {
+		LOG_ERR("Unable to write DIO_MAPPING1");
+		return -EIO;
+	}
+
 	ret = sx1276_read(dev, SX1276_REG_OPMODE, &regval, 1);
 	if (ret < 0) {
 		LOG_ERR("Unable to read OPMODE");
 		return -EIO;
 	}
 
-	//REMOVE
-	LOG_INF("opmode before: %x", regval);
 	regval &= ~SX1276_OPMODE_MODE_MASK;
-	regval |= SX1276_OPMODE_MODE_STDBY;
+	regval |= SX1276_OPMODE_MODE_RXCONTINUOUS;
 	ret = sx1276_write(dev, SX1276_REG_OPMODE, regval); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write OPMODE");
 		return -EIO;
 	}
 
-	ret = sx1276_read(dev, SX1276_REG_FIFO_TX_BASE_ADDR, &fifo_ptr, 1);
-	if (ret < 0) {
-		LOG_ERR("Unable to read FIFO Tx base addr");
-		return -EIO;
-	}
-
-	LOG_INF("FIFO Addr: %x", fifo_ptr);
-	
-	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, fifo_ptr);
-	if (ret < 0) {
-		LOG_ERR("Unable to write FIFO Tx addr pointer");
-		return -EIO;
-	}
-
-	ret = sx1276_write(dev, SX1276_REG_PAYLOAD_LENGTH, data_len);
-	if (ret < 0) {
-		LOG_ERR("Unable to write payload length");
-		return -EIO;
-	}
-
-	ret = sx1276_fifo_write(dev, data, data_len);
-	if (ret < 0)
-		return ret;
+	k_sleep(2000);
 
 	ret = sx1276_read(dev, SX1276_REG_IRQ_FLAGS, &regval, 1);
 	if (ret < 0) {
@@ -189,24 +206,49 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 		return -EIO;
 	}
 
-	ret = sx1276_write(dev, SX1276_REG_IRQ_FLAGS, LORA_REG_IRQ_FLAGS_TX_DONE);
+	if (regval & 0x20)
+		LOG_ERR("Payload CRC Error");
+
+	if (regval & 0x10)
+		LOG_ERR("Valid header found");
+	else
+		LOG_ERR("No Valid header found");
+
+	ret = sx1276_read(dev, SX1276_REG_FIFO_RX_CUR_ADDR, &loc, 1);
 	if (ret < 0) {
-		LOG_ERR("Unable to write IRQ_FLAGS");
+		LOG_ERR("Unable to read RX curr addr");
+		return -EIO;
+	}
+	
+	LOG_INF("RX Cur Addr: %x", loc);
+
+	ret = sx1276_read(dev, SX1276_REG_RX_NB_BYTES, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read RX len");
+		return -EIO;
+	}
+	
+	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, loc);
+	if (ret < 0) {
+		LOG_ERR("Unable to write FIFO Tx addr pointer");
 		return -EIO;
 	}
 
-	ret = sx1276_read(dev, SX1276_REG_IRQ_FLAGS_MASK, &regval, 1);
+	LOG_INF("RX len: %x", regval);
+
+	ret = sx1276_fifo_read(dev, data, regval);
 	if (ret < 0) {
-		LOG_ERR("Unable to read IRQ_FLAGS_MASK");
+		LOG_ERR("Unable to read RX data");
 		return -EIO;
 	}
 
-	regval &= ~LORA_REG_IRQ_FLAGS_TX_DONE;
-	ret = sx1276_write(dev, SX1276_REG_IRQ_FLAGS_MASK, regval);
-	if (ret < 0) {
-		LOG_ERR("Unable to write IRQ_FLAGS_MASK");
-		return -EIO;
-	}
+	return 0;
+}
+
+static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
+{
+	int ret;
+	u8_t regval, fifo_ptr;
 
 	ret = sx1276_read(dev, SX1276_REG_DIO_MAPPING1, &regval, 1);
 	if (ret < 0) {
@@ -222,9 +264,50 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 		return -EIO;
 	}
 
-	ret = sx1276_read(dev, SX1276_REG_DIO_MAPPING1, &regval, 1);
-	LOG_INF("mapping: %x", regval);
+	ret = sx1276_read(dev, SX1276_REG_FIFO_TX_BASE_ADDR, 0x00, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read FIFO Tx base addr");
+		return -EIO;
+	}
 
+//	LOG_INF("FIFO Addr: %x", fifo_ptr);
+	
+	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, 0x00);
+	if (ret < 0) {
+		LOG_ERR("Unable to write FIFO Tx addr pointer");
+		return -EIO;
+	}
+
+	ret = sx1276_write(dev, SX1276_REG_PAYLOAD_LENGTH, data_len);
+	if (ret < 0) {
+		LOG_ERR("Unable to write payload length");
+		return -EIO;
+	}
+
+	ret = sx1276_fifo_write(dev, data, data_len);
+	if (ret < 0)
+		return ret;
+
+	/* fix */
+	ret = sx1276_write(dev, SX1276_REG_IRQ_FLAGS, 0xFF);
+	if (ret < 0) {
+		LOG_ERR("Unable to write IRQ_FLAGS");
+		return -EIO;
+	}
+/*
+	ret = sx1276_read(dev, SX1276_REG_IRQ_FLAGS_MASK, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read IRQ_FLAGS_MASK");
+		return -EIO;
+	}
+
+	regval &= ~LORA_REG_IRQ_FLAGS_TX_DONE;
+	ret = sx1276_write(dev, SX1276_REG_IRQ_FLAGS_MASK, regval);
+	if (ret < 0) {
+		LOG_ERR("Unable to write IRQ_FLAGS_MASK");
+		return -EIO;
+	}
+*/
 	ret = sx1276_read(dev, SX1276_REG_OPMODE, &regval, 1);
 	if (ret < 0) {
 		LOG_ERR("Unable to read OPMODE");
@@ -252,9 +335,21 @@ static int sx1276_lora_config(struct device *dev,
 	u8_t regval, pa_config;
 
 	/* TODO: Set antenna pins to sleep mode */
-	/* Set LoRa mode and sleep */
-	regval = SX1276_OPMODE_LONG_RANGE_MODE | SX1276_OPMODE_MODE_SLEEP;
+	/* Set sleep mode */
+	ret = sx1276_write(dev, SX1276_REG_OPMODE, SX1276_OPMODE_MODE_SLEEP); 
+	if (ret < 0) {
+		LOG_ERR("Unable to write OPMODE");
+		return -EIO;
+	}
 
+	/* Set LoRa mode */
+	ret = sx1276_read(dev, SX1276_REG_OPMODE, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read OPMODE");
+		return -EIO;
+	}
+
+	regval |= SX1276_OPMODE_LONG_RANGE_MODE;
 	/* Set low frequency mode if required */
 	if (config->frequency < 525000000)
 		regval |= SX1276_OPMODE_LOW_FREQUENCY_MODE_ON;
@@ -265,18 +360,50 @@ static int sx1276_lora_config(struct device *dev,
 		return -EIO;
 	}
 
+	/* Set standby mode */
+	ret = sx1276_read(dev, SX1276_REG_OPMODE, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read OPMODE");
+		return -EIO;
+	}
+
+	//REMOVE
+	LOG_INF("opmode before: %x", regval);
+	regval &= ~SX1276_OPMODE_MODE_MASK;
+	regval |= SX1276_OPMODE_MODE_STDBY;
+	ret = sx1276_write(dev, SX1276_REG_OPMODE, regval); 
+	if (ret < 0) {
+		LOG_ERR("Unable to write OPMODE");
+		return -EIO;
+	}
+
+	k_sleep(200);
+
 	/* Set frequency */		
 	freq_rf = config->frequency;;
-	freq_rf *= (1 << 19);
-	freq_rf /= CLOCK_FREQ;
-//	freq_rf = ( uint32_t )( ( double )freq_rf / ( double ) 61.03515625);
+//	freq_rf *= (1 << 19);
+//	freq_rf /= CLOCK_FREQ;
+	freq_rf = ( uint32_t )( ( double )freq_rf / ( double ) 61.035);
 	LOG_INF("freq: %u", (unsigned int) freq_rf);
 
+	/*TODO: remove comment
 	ret = sx1276_write(dev, SX1276_REG_FRF_MSB, (freq_rf >> 16 & 0xFF));
 	if (!ret)
 		ret = sx1276_write(dev, SX1276_REG_FRF_MID, (freq_rf >> 8 & 0xFF));
 	if (!ret)
 		ret = sx1276_write(dev, SX1276_REG_FRF_LSB, (freq_rf & 0xFF));
+	if (ret) {
+		LOG_ERR("Unable to write RF carrier frequency");
+		return -EIO;
+	}
+	*/
+
+	//REMOVE
+	ret = sx1276_write(dev, SX1276_REG_FRF_MSB, (0xD9 & 0xFF));
+	if (!ret)
+		ret = sx1276_write(dev, SX1276_REG_FRF_MID, (0x06 & 0xFF));
+	if (!ret)
+		ret = sx1276_write(dev, SX1276_REG_FRF_LSB, (0x8B & 0xFF));
 	if (ret) {
 		LOG_ERR("Unable to write RF carrier frequency");
 		return -EIO;
@@ -288,7 +415,7 @@ static int sx1276_lora_config(struct device *dev,
 		LOG_ERR("Unable to read version PA config");
 		return -EIO;
 	}
-
+/*
 	pa_config &= ~GENMASK(3, 0);
 #if defined CONFIG_PA_RFO_PIN
 	pa_config &= ~SX1276_PA_CONFIG_PA_BOOST;
@@ -320,9 +447,29 @@ static int sx1276_lora_config(struct device *dev,
 	}
 #endif
 	pa_config |= (config->tx_power & 0x0F);
-	ret = sx1276_write(dev, SX1276_REG_PA_CONFIG, pa_config); 
+
+	//ret = sx1276_write(dev, SX1276_REG_PA_CONFIG, pa_config); 
+	ret = sx1276_write(dev, SX1276_REG_PA_CONFIG, 0xFF); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write PA config");
+		return -EIO;
+	}
+
+	ret = sx1276_write(dev, SX1276_REG_LNA, 0x23); 
+	if (ret < 0) {
+		LOG_ERR("Unable to write LNA");
+		return -EIO;
+	}
+*/
+	/* Fix */ret = sx1276_write(dev, SX1276_REG_PREAMBLE_MSB, 0x00); 
+	if (ret < 0) {
+		LOG_ERR("Unable to write Preamble");
+		return -EIO;
+	}
+
+	/* Fix */ret = sx1276_write(dev, SX1276_REG_PREAMBLE_LSB, 0x08); 
+	if (ret < 0) {
+		LOG_ERR("Unable to write Preamble");
 		return -EIO;
 	}
 
@@ -346,12 +493,14 @@ static int sx1276_lora_config(struct device *dev,
 	regval &= ~SX1276_MODEM_CONFIG1_BW_MASK;
 	regval &= ~SX1276_MODEM_CONFIG1_CR_MASK;
 	regval |= (config->bandwidth << 4);
+	/* TODO */ regval |= 0x02;
 	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG1, regval); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write Modem Config1");
 		return -EIO;
 	}
 
+	/* remove */LOG_INF("modem config1: %x", regval);
 	/* Set spreading factor */
 	ret = sx1276_read(dev, SX1276_REG_MODEM_CONFIG2, &regval, 1);
 	if (ret < 0) {
@@ -361,19 +510,28 @@ static int sx1276_lora_config(struct device *dev,
 
 	regval &= ~SX1276_MODEM_CONFIG2_SF_MASK;
 	regval |= (config->spreading_factor << 4);
+	/* crc fix */regval |= 4;
 	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG2, regval); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write Modem Config2");
 		return -EIO;
 	}
 
+	/* TODO: Fix */
+	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG3, 0x0C); 
+	if (ret < 0) {
+		LOG_ERR("Unable to write Modem Config3");
+		return -EIO;
+	}
+
+	/* remove */LOG_INF("modem config2: %x", regval);
 	return 0;
 }
 
 static void sx1276_irq_callback(struct device *dev,
 				struct gpio_callback *cb, u32_t pins)
 {
-	LOG_INF("TX IRQ");
+	LOG_ERR("IRQ");
 }
 
 static int sx1276_lora_init(struct device *dev)
@@ -415,8 +573,8 @@ static int sx1276_lora_init(struct device *dev)
 	}
 
 	gpio_pin_configure(data->dio0, GPIO_DIO0_PIN,
-			   GPIO_DIR_IN | GPIO_INT | GPIO_INT_EDGE | GPIO_PUD_PULL_UP |
-			   GPIO_INT_ACTIVE_HIGH);
+			   GPIO_DIR_IN | GPIO_INT | GPIO_INT_EDGE |
+			   GPIO_INT_DEBOUNCE | GPIO_INT_ACTIVE_HIGH);
 
 	gpio_init_callback(&data->irq_cb,
 			   sx1276_irq_callback,
@@ -427,6 +585,27 @@ static int sx1276_lora_init(struct device *dev)
 		return -EIO;
 	}
 	gpio_pin_enable_callback(data->dio0, GPIO_DIO0_PIN);
+
+/****************/
+	struct device *gpioa =
+	       device_get_binding(DT_ST_STM32_GPIO_40020000_LABEL);
+	struct device *gpiob =
+	       device_get_binding(DT_ST_STM32_GPIO_40020400_LABEL);
+	struct device *gpioh =
+	       device_get_binding(DT_ST_STM32_GPIO_40021400_LABEL);
+
+	gpio_pin_configure(gpioa, 4, GPIO_DIR_OUT);
+	gpio_pin_write(gpioa, 4, 1);
+
+	gpio_pin_configure(gpiob, 6, GPIO_DIR_OUT);
+	gpio_pin_write(gpiob, 6, 0);
+
+	gpio_pin_configure(gpiob, 7, GPIO_DIR_OUT);
+	gpio_pin_write(gpiob, 6, 0);
+
+	gpio_pin_configure(gpioh, 1, GPIO_DIR_OUT);
+	gpio_pin_write(gpioh, 1, 1);
+/************************/
 
 	/* Setup Reset gpio */
 	reset_dev = device_get_binding(
@@ -461,6 +640,7 @@ static struct sx1276_data sx1276_lora_data;
 static const struct lora_driver_api sx1276_lora_api = {
 	.config = sx1276_lora_config,
 	.send = sx1276_lora_send,
+	.recv = sx1276_lora_recv,
 };
 
 DEVICE_AND_API_INIT(sx1276_lora, DT_INST_0_SEMTECH_SX1276_LABEL,
