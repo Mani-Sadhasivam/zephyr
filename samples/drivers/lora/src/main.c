@@ -39,7 +39,7 @@ void main(void)
 		return;
 	}
 
-	while (1) {
+//	while (1) {
 		LOG_INF("sending");
 		ret = lora_send(lora_dev, data, 13);
 		if (ret < 0) {
@@ -48,5 +48,6 @@ void main(void)
 		}
 
 		k_sleep(2000);
-	}
+//	}
+	while(1);
 }

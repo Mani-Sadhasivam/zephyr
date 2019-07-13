@@ -31,4 +31,9 @@ properties:
       category: optional
       generation: define, use-prop-name
 
+    dio-gpios:
+      type: compound
+      category: optional
+      generation: define, use-prop-name
+
 ...

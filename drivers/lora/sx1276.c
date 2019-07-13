@@ -51,6 +51,7 @@ LOG_MODULE_REGISTER(sx1276);
 
 #define REG_DIO_MAPPING1_DIO0_MASK	GENMASK(7, 6)
 
+#define GPIO_DIO0_PIN			DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_PIN
 #define GPIO_RESET_PIN			DT_INST_0_SEMTECH_SX1276_RESET_GPIOS_PIN
 #define GPIO_CS_PIN			DT_INST_0_SEMTECH_SX1276_CS_GPIO_PIN
 #define CLOCK_FREQ			DT_INST_0_SEMTECH_SX1276_CLOCK_FREQUENCY
@@ -61,6 +62,8 @@ LOG_MODULE_REGISTER(sx1276);
 struct sx1276_data {
 	struct device *spi;
 	struct spi_config spi_cfg;
+	struct device *dio0;
+	struct gpio_callback irq_cb;
 };
 
 struct _sx1276_power {
@@ -146,11 +149,27 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 		return -EIO;
 	}
 
+	//REMOVE
+	LOG_INF("opmode before: %x", regval);
 	regval &= ~SX1276_OPMODE_MODE_MASK;
 	regval |= SX1276_OPMODE_MODE_STDBY;
 	ret = sx1276_write(dev, SX1276_REG_OPMODE, regval); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write OPMODE");
+		return -EIO;
+	}
+
+	ret = sx1276_read(dev, SX1276_REG_FIFO_TX_BASE_ADDR, &fifo_ptr, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read FIFO Tx base addr");
+		return -EIO;
+	}
+
+	LOG_INF("FIFO Addr: %x", fifo_ptr);
+	
+	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, fifo_ptr);
+	if (ret < 0) {
+		LOG_ERR("Unable to write FIFO Tx addr pointer");
 		return -EIO;
 	}
 
@@ -160,21 +179,51 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 		return -EIO;
 	}
 
-	ret = sx1276_write(dev, SX1276_REG_FIFO_TX_BASE_ADDR, 0);
-	if (ret < 0) {
-		LOG_ERR("Unable to read FIFO Tx base addr");
-		return -EIO;
-	}
-
-	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, 0);
-	if (ret < 0) {
-		LOG_ERR("Unable to write FIFO Tx addr pointer");
-		return -EIO;
-	}
-
 	ret = sx1276_fifo_write(dev, data, data_len);
 	if (ret < 0)
 		return ret;
+
+	ret = sx1276_read(dev, SX1276_REG_IRQ_FLAGS, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read IRQ_FLAGS");
+		return -EIO;
+	}
+
+	ret = sx1276_write(dev, SX1276_REG_IRQ_FLAGS, LORA_REG_IRQ_FLAGS_TX_DONE);
+	if (ret < 0) {
+		LOG_ERR("Unable to write IRQ_FLAGS");
+		return -EIO;
+	}
+
+	ret = sx1276_read(dev, SX1276_REG_IRQ_FLAGS_MASK, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read IRQ_FLAGS_MASK");
+		return -EIO;
+	}
+
+	regval &= ~LORA_REG_IRQ_FLAGS_TX_DONE;
+	ret = sx1276_write(dev, SX1276_REG_IRQ_FLAGS_MASK, regval);
+	if (ret < 0) {
+		LOG_ERR("Unable to write IRQ_FLAGS_MASK");
+		return -EIO;
+	}
+
+	ret = sx1276_read(dev, SX1276_REG_DIO_MAPPING1, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read DIO_MAPPING1");
+		return -EIO;
+	}
+
+	regval &= ~REG_DIO_MAPPING1_DIO0_MASK;
+	regval |= 0x1 << 6;
+	ret = sx1276_write(dev, SX1276_REG_DIO_MAPPING1, regval);
+	if (ret < 0) {
+		LOG_ERR("Unable to write DIO_MAPPING1");
+		return -EIO;
+	}
+
+	ret = sx1276_read(dev, SX1276_REG_DIO_MAPPING1, &regval, 1);
+	LOG_INF("mapping: %x", regval);
 
 	ret = sx1276_read(dev, SX1276_REG_OPMODE, &regval, 1);
 	if (ret < 0) {
@@ -190,6 +239,8 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 		return -EIO;
 	}
 
+	//REMOVE
+	LOG_INF("opmode after tx: %x", regval);
 	return 0;
 }
 
@@ -200,11 +251,25 @@ static int sx1276_lora_config(struct device *dev,
 	int ret;
 	u8_t regval, pa_config;
 
+	/* TODO: Set antenna pins to sleep mode */
+	/* Set LoRa mode and sleep */
+	regval = SX1276_OPMODE_LONG_RANGE_MODE | SX1276_OPMODE_MODE_SLEEP;
+
+	/* Set low frequency mode if required */
+	if (config->frequency < 525000000)
+		regval |= SX1276_OPMODE_LOW_FREQUENCY_MODE_ON;
+
+	ret = sx1276_write(dev, SX1276_REG_OPMODE, regval); 
+	if (ret < 0) {
+		LOG_ERR("Unable to write OPMODE");
+		return -EIO;
+	}
+
 	/* Set frequency */		
 	freq_rf = config->frequency;;
-//	freq_rf *= (1 << 19);
-//	freq_rf /= CLOCK_FREQ;
-	freq_rf = ( uint32_t )( ( double )freq_rf / ( double ) 61.03515625);
+	freq_rf *= (1 << 19);
+	freq_rf /= CLOCK_FREQ;
+//	freq_rf = ( uint32_t )( ( double )freq_rf / ( double ) 61.03515625);
 	LOG_INF("freq: %u", (unsigned int) freq_rf);
 
 	ret = sx1276_write(dev, SX1276_REG_FRF_MSB, (freq_rf >> 16 & 0xFF));
@@ -216,39 +281,6 @@ static int sx1276_lora_config(struct device *dev,
 		LOG_ERR("Unable to write RF carrier frequency");
 		return -EIO;
 	}
-
-	/* TODO: Set antenna pins to sleep mode */
-	/* Enter sleep mode */
-	ret = sx1276_read(dev, SX1276_REG_OPMODE, &regval, 1);
-	if (ret < 0) {
-		LOG_ERR("Unable to read OPMODE");
-		return -EIO;
-	}
-
-	regval &= ~SX1276_OPMODE_MODE_MASK;
-	regval |= SX1276_OPMODE_MODE_SLEEP;
-	ret = sx1276_write(dev, SX1276_REG_OPMODE, regval); 
-	if (ret < 0) {
-		LOG_ERR("Unable to write OPMODE");
-		return -EIO;
-	}
-
-	/* Set LoRa mode */
-	ret = sx1276_read(dev, SX1276_REG_OPMODE, &regval, 1);
-	if (ret < 0) {
-		LOG_ERR("Unable to read OPMODE");
-		return -EIO;
-	}
-
-	regval |= SX1276_OPMODE_LONG_RANGE_MODE;
-	ret = sx1276_write(dev, SX1276_REG_OPMODE, regval); 
-	if (ret < 0) {
-		LOG_ERR("Unable to write OPMODE");
-		return -EIO;
-	}
-
-	sx1276_write(dev, SX1276_REG_DIO_MAPPING1, 0x00); 
-	sx1276_write(dev, SX1276_REG_DIO_MAPPING2, 0x00);
 
 	/* Set output power */
 	ret = sx1276_read(dev, SX1276_REG_PA_CONFIG, &pa_config, 1);
@@ -338,6 +370,12 @@ static int sx1276_lora_config(struct device *dev,
 	return 0;
 }
 
+static void sx1276_irq_callback(struct device *dev,
+				struct gpio_callback *cb, u32_t pins)
+{
+	LOG_INF("TX IRQ");
+}
+
 static int sx1276_lora_init(struct device *dev)
 {
 	struct sx1276_data *data = dev->driver_data;
@@ -368,6 +406,29 @@ static int sx1276_lora_init(struct device *dev)
 
 	data->spi_cfg.cs = &spi_cs;
 
+	/* Setup DIO gpio */
+	data->dio0 = device_get_binding(DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_CONTROLLER);
+	if (data->dio0 == NULL) {
+		LOG_ERR("Cannot get pointer to %s device.",
+			    DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_CONTROLLER);
+		return -EINVAL;
+	}
+
+	gpio_pin_configure(data->dio0, GPIO_DIO0_PIN,
+			   GPIO_DIR_IN | GPIO_INT | GPIO_INT_EDGE | GPIO_PUD_PULL_UP |
+			   GPIO_INT_ACTIVE_HIGH);
+
+	gpio_init_callback(&data->irq_cb,
+			   sx1276_irq_callback,
+			   BIT(GPIO_DIO0_PIN));
+
+	if (gpio_add_callback(data->dio0, &data->irq_cb) < 0) {
+		LOG_ERR("Could not set gpio callback.");
+		return -EIO;
+	}
+	gpio_pin_enable_callback(data->dio0, GPIO_DIO0_PIN);
+
+	/* Setup Reset gpio */
 	reset_dev = device_get_binding(
 			DT_INST_0_SEMTECH_SX1276_RESET_GPIOS_CONTROLLER);
 	if (!reset_dev) {
