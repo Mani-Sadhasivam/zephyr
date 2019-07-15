@@ -55,6 +55,7 @@ LOG_MODULE_REGISTER(sx1276);
 #define SX1276_PA_CONFIG_PA_BOOST		BIT(7)
 
 #define LORA_REG_IRQ_FLAGS_TX_DONE		BIT(3)
+#define LORA_REG_IRQ_FLAGS_RX_DONE		BIT(6)
 
 #define REG_DIO_MAPPING1_DIO0_MASK	GENMASK(7, 6)
 
@@ -67,10 +68,12 @@ LOG_MODULE_REGISTER(sx1276);
 #define SX1276_PA_BOOST				1
 
 struct sx1276_data {
+	struct device *dev;
 	struct device *spi;
 	struct spi_config spi_cfg;
 	struct device *dio0;
 	struct gpio_callback irq_cb;
+	struct k_sem data_sem;
 };
 
 struct _sx1276_power {
@@ -147,13 +150,16 @@ int sx1276_fifo_write(struct device *dev, u8_t *data, u32_t data_len)
 int sx1276_fifo_read(struct device *dev, u8_t *data, u32_t data_len)
 {
 	int ret, i;
+	u8_t regval;
 
 	for (i = 0; i < data_len; i++) {
-		ret = sx1276_read(dev, SX1276_REG_FIFO, &data[i], 1);
+		ret = sx1276_read(dev, SX1276_REG_FIFO, &regval, 1);
 		if (ret < 0) {
 			LOG_ERR("Unable to read FIFO");
 			return -EIO;
 		}
+
+		data[i] = regval;
 	}
 
 	return 0;
@@ -161,8 +167,9 @@ int sx1276_fifo_read(struct device *dev, u8_t *data, u32_t data_len)
 
 static int sx1276_lora_recv(struct device *dev, u8_t *data, u32_t data_len)
 {
+	struct sx1276_data *dev_data = dev->driver_data;
 	int ret;
-	u8_t regval, loc;
+	u8_t regval, loc = 0;
 	
 	/* fix */
 	ret = sx1276_write(dev, SX1276_REG_IRQ_FLAGS, 0xFF);
@@ -198,21 +205,7 @@ static int sx1276_lora_recv(struct device *dev, u8_t *data, u32_t data_len)
 		return -EIO;
 	}
 
-	k_sleep(2000);
-
-	ret = sx1276_read(dev, SX1276_REG_IRQ_FLAGS, &regval, 1);
-	if (ret < 0) {
-		LOG_ERR("Unable to read IRQ_FLAGS");
-		return -EIO;
-	}
-
-	if (regval & 0x20)
-		LOG_ERR("Payload CRC Error");
-
-	if (regval & 0x10)
-		LOG_ERR("Valid header found");
-	else
-		LOG_ERR("No Valid header found");
+	k_sem_take(&dev_data->data_sem, K_FOREVER);
 
 	ret = sx1276_read(dev, SX1276_REG_FIFO_RX_CUR_ADDR, &loc, 1);
 	if (ret < 0) {
@@ -220,8 +213,6 @@ static int sx1276_lora_recv(struct device *dev, u8_t *data, u32_t data_len)
 		return -EIO;
 	}
 	
-	LOG_INF("RX Cur Addr: %x", loc);
-
 	ret = sx1276_read(dev, SX1276_REG_RX_NB_BYTES, &regval, 1);
 	if (ret < 0) {
 		LOG_ERR("Unable to read RX len");
@@ -234,8 +225,7 @@ static int sx1276_lora_recv(struct device *dev, u8_t *data, u32_t data_len)
 		return -EIO;
 	}
 
-	LOG_INF("RX len: %x", regval);
-
+	LOG_INF("RX data len: %d", regval);
 	ret = sx1276_fifo_read(dev, data, regval);
 	if (ret < 0) {
 		LOG_ERR("Unable to read RX data");
@@ -264,15 +254,13 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 		return -EIO;
 	}
 
-	ret = sx1276_read(dev, SX1276_REG_FIFO_TX_BASE_ADDR, 0x00, 1);
+	ret = sx1276_read(dev, SX1276_REG_FIFO_TX_BASE_ADDR, &fifo_ptr, 1);
 	if (ret < 0) {
 		LOG_ERR("Unable to read FIFO Tx base addr");
 		return -EIO;
 	}
 
-//	LOG_INF("FIFO Addr: %x", fifo_ptr);
-	
-	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, 0x00);
+	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, fifo_ptr);
 	if (ret < 0) {
 		LOG_ERR("Unable to write FIFO Tx addr pointer");
 		return -EIO;
@@ -288,7 +276,7 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 	if (ret < 0)
 		return ret;
 
-	/* fix */
+	/* Clear all IRQs */
 	ret = sx1276_write(dev, SX1276_REG_IRQ_FLAGS, 0xFF);
 	if (ret < 0) {
 		LOG_ERR("Unable to write IRQ_FLAGS");
@@ -322,8 +310,6 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 		return -EIO;
 	}
 
-	//REMOVE
-	LOG_INF("opmode after tx: %x", regval);
 	return 0;
 }
 
@@ -367,8 +353,6 @@ static int sx1276_lora_config(struct device *dev,
 		return -EIO;
 	}
 
-	//REMOVE
-	LOG_INF("opmode before: %x", regval);
 	regval &= ~SX1276_OPMODE_MODE_MASK;
 	regval |= SX1276_OPMODE_MODE_STDBY;
 	ret = sx1276_write(dev, SX1276_REG_OPMODE, regval); 
@@ -384,7 +368,6 @@ static int sx1276_lora_config(struct device *dev,
 //	freq_rf *= (1 << 19);
 //	freq_rf /= CLOCK_FREQ;
 	freq_rf = ( uint32_t )( ( double )freq_rf / ( double ) 61.035);
-	LOG_INF("freq: %u", (unsigned int) freq_rf);
 
 	/*TODO: remove comment
 	ret = sx1276_write(dev, SX1276_REG_FRF_MSB, (freq_rf >> 16 & 0xFF));
@@ -500,7 +483,6 @@ static int sx1276_lora_config(struct device *dev,
 		return -EIO;
 	}
 
-	/* remove */LOG_INF("modem config1: %x", regval);
 	/* Set spreading factor */
 	ret = sx1276_read(dev, SX1276_REG_MODEM_CONFIG2, &regval, 1);
 	if (ret < 0) {
@@ -524,14 +506,52 @@ static int sx1276_lora_config(struct device *dev,
 		return -EIO;
 	}
 
-	/* remove */LOG_INF("modem config2: %x", regval);
+	/* fix */
+	ret = sx1276_write(dev, SX1276_REG_SYNC_WORD, 0x34); 
+	if (ret < 0) {
+		LOG_ERR("Unable to write Sync Word");
+		return -EIO;
+	}
+
 	return 0;
 }
 
 static void sx1276_irq_callback(struct device *dev,
 				struct gpio_callback *cb, u32_t pins)
 {
-	LOG_ERR("IRQ");
+	struct sx1276_data *dev_data =
+		CONTAINER_OF(cb, struct sx1276_data, irq_cb);
+	int ret;
+	u8_t regval;
+
+	ret = sx1276_read(dev_data->dev, SX1276_REG_IRQ_FLAGS, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read IRQ_FLAGS");
+		return;
+	}
+
+	if (regval & LORA_REG_IRQ_FLAGS_TX_DONE) {
+		LOG_INF("TX IRQ");
+	}
+
+	if (regval & LORA_REG_IRQ_FLAGS_RX_DONE) {
+		LOG_INF("RX IRQ");
+		if (regval & 0x20)
+			LOG_ERR("Payload CRC Error");
+
+		if (regval & 0x10)
+			LOG_ERR("Valid header found");
+		else
+			LOG_ERR("No Valid header found");
+	}
+
+	ret = sx1276_write(dev_data->dev, SX1276_REG_IRQ_FLAGS, regval);
+	if (ret < 0) {
+		LOG_ERR("Unable to write IRQ_FLAGS");
+		return;
+	}
+
+	k_sem_give(&dev_data->data_sem);
 }
 
 static int sx1276_lora_init(struct device *dev)
@@ -586,7 +606,7 @@ static int sx1276_lora_init(struct device *dev)
 	}
 	gpio_pin_enable_callback(data->dio0, GPIO_DIO0_PIN);
 
-/****************/
+/*********************/
 	struct device *gpioa =
 	       device_get_binding(DT_ST_STM32_GPIO_40020000_LABEL);
 	struct device *gpiob =
@@ -598,14 +618,14 @@ static int sx1276_lora_init(struct device *dev)
 	gpio_pin_write(gpioa, 4, 1);
 
 	gpio_pin_configure(gpiob, 6, GPIO_DIR_OUT);
-	gpio_pin_write(gpiob, 6, 0);
+	gpio_pin_write(gpiob, 6, 1);
 
 	gpio_pin_configure(gpiob, 7, GPIO_DIR_OUT);
-	gpio_pin_write(gpiob, 6, 0);
+	gpio_pin_write(gpiob, 7, 0);
 
 	gpio_pin_configure(gpioh, 1, GPIO_DIR_OUT);
 	gpio_pin_write(gpioh, 1, 1);
-/************************/
+/***********************/
 
 	/* Setup Reset gpio */
 	reset_dev = device_get_binding(
@@ -629,6 +649,9 @@ static int sx1276_lora_init(struct device *dev)
 		LOG_ERR("Unable to read version info");
 		return -EIO;
 	}
+
+	k_sem_init(&data->data_sem, 0, UINT_MAX);
+	data->dev = dev;
 
 	LOG_INF("SX1276 Version:%02x found", regval);
 

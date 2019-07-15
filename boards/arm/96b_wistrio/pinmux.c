@@ -55,10 +55,10 @@ static int pinmux_stm32_init(struct device *port)
 	gpio_pin_write(gpioa, 4, 1);
 
 	gpio_pin_configure(gpiob, 6, GPIO_DIR_OUT);
-	gpio_pin_write(gpiob, 6, 0);
+	gpio_pin_write(gpiob, 6, 1);
 
 	gpio_pin_configure(gpiob, 7, GPIO_DIR_OUT);
-	gpio_pin_write(gpiob, 6, 0);
+	gpio_pin_write(gpiob, 7, 0);
 
 	gpio_pin_configure(gpioh, 1, GPIO_DIR_OUT);
 	gpio_pin_write(gpioh, 1, 1);
