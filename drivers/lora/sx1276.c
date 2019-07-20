@@ -34,7 +34,9 @@ LOG_MODULE_REGISTER(sx1276);
 #define SX1276_REG_PREAMBLE_LSB			0x21
 #define SX1276_REG_PAYLOAD_LENGTH		0x22
 #define SX1276_REG_MODEM_CONFIG3		0x26
+#define SX1276_REG_DET_OPT			0x31
 #define SX1276_REG_INVERT_IQ			0x33
+#define SX1276_REG_DET_THRES			0x37
 #define SX1276_REG_SYNC_WORD			0x39
 #define SX1276_REG_INVERT_IQ2			0x3b
 #define SX1276_REG_DIO_MAPPING1			0x40
@@ -56,6 +58,13 @@ LOG_MODULE_REGISTER(sx1276);
 #define SX1276_MODEM_CONFIG1_IMP_HDR		BIT(0)
 #define SX1276_MODEM_CONFIG2_SF_MASK		GENMASK(7, 4)
 #define SX1276_PA_CONFIG_PA_BOOST		BIT(7)
+
+#define SX1276_DET_OPT_MASK			GENMASK(2, 0)
+#define SX1276_DET_OPT_SF7_SF12			0x03
+#define SX1276_DET_OPT_SF6			0x05
+#define SX1276_DET_THRES			GENMASK(7, 0)
+#define SX1276_DET_THRES_SF7_SF12		0x0a
+#define SX1276_DET_THRES_SF6			0x0c
 
 #define LORA_REG_IRQ_FLAGS_TX_DONE		BIT(3)
 #define LORA_REG_IRQ_FLAGS_RX_DONE		BIT(6)
@@ -163,6 +172,7 @@ int sx1276_fifo_read(struct device *dev, u8_t *data, u32_t data_len)
 			return -EIO;
 		}
 
+		LOG_INF("Received: %d", regval);
 		data[i] = regval;
 	}
 
@@ -173,7 +183,7 @@ static int sx1276_lora_recv(struct device *dev, u8_t *data)
 {
 	struct sx1276_data *dev_data = dev->driver_data;
 	int ret;
-	u8_t regval, loc = 0;
+	u8_t regval, len, loc = 0;
 	
 	/* fix */
 	ret = sx1276_write(dev, SX1276_REG_IRQ_FLAGS, 0xFF);
@@ -201,6 +211,36 @@ static int sx1276_lora_recv(struct device *dev, u8_t *data)
 		return -EIO;
 	}
 
+	/* FIFO cannot be accessed in sleep mode */	
+	if (regval & SX1276_OPMODE_MODE_SLEEP) {
+		regval &= ~SX1276_OPMODE_MODE_MASK;
+		regval |= SX1276_OPMODE_MODE_STDBY;
+	}
+
+	ret = sx1276_write(dev, SX1276_REG_OPMODE, regval);
+	if (ret < 0) {
+		LOG_ERR("Unable to write OPMODE");
+		return -EIO;
+	}
+
+	ret = sx1276_write(dev, SX1276_REG_FIFO_RX_BASE_ADDR, 0x00);
+	if (ret < 0) {
+		LOG_ERR("Unable to write FIFO Rx base addr");
+		return -EIO;
+	}
+
+	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, 0x00);
+	if (ret < 0) {
+		LOG_ERR("Unable to write FIFO addr pointer");
+		return -EIO;
+	}
+
+	ret = sx1276_read(dev, SX1276_REG_OPMODE, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read OPMODE");
+		return -EIO;
+	}
+
 	regval &= ~SX1276_OPMODE_MODE_MASK;
 	regval |= SX1276_OPMODE_MODE_RXCONTINUOUS;
 	ret = sx1276_write(dev, SX1276_REG_OPMODE, regval); 
@@ -211,7 +251,7 @@ static int sx1276_lora_recv(struct device *dev, u8_t *data)
 
 	k_sem_take(&dev_data->data_sem, K_FOREVER);
 
-	ret = sx1276_read(dev, SX1276_REG_RX_NB_BYTES, &regval, 1);
+	ret = sx1276_read(dev, SX1276_REG_RX_NB_BYTES, &len, 1);
 	if (ret < 0) {
 		LOG_ERR("Unable to read RX len");
 		return -EIO;
@@ -222,21 +262,20 @@ static int sx1276_lora_recv(struct device *dev, u8_t *data)
 		LOG_ERR("Unable to read RX curr addr");
 		return -EIO;
 	}
-	
-	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, loc);
+
+	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, (loc - 1));
 	if (ret < 0) {
 		LOG_ERR("Unable to write FIFO Tx addr pointer");
 		return -EIO;
 	}
 
-	LOG_INF("RX data len: %d", regval);
-	ret = sx1276_fifo_read(dev, data, regval);
+	ret = sx1276_fifo_read(dev, data, (len - 1));
 	if (ret < 0) {
 		LOG_ERR("Unable to read RX data");
 		return -EIO;
 	}
 
-	return regval;
+	return len;
 }
 
 static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
@@ -258,6 +297,24 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 		return -EIO;
 	}
 
+	ret = sx1276_read(dev, SX1276_REG_OPMODE, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read OPMODE");
+		return -EIO;
+	}
+
+	/* FIFO cannot be accessed in sleep mode */	
+	if (regval & SX1276_OPMODE_MODE_SLEEP) {
+		regval &= ~SX1276_OPMODE_MODE_MASK;
+		regval |= SX1276_OPMODE_MODE_STDBY;
+	}
+
+	ret = sx1276_write(dev, SX1276_REG_OPMODE, regval);
+	if (ret < 0) {
+		LOG_ERR("Unable to write OPMODE");
+		return -EIO;
+	}
+
 	/* Make use of full FIFO */
 	ret = sx1276_write(dev, SX1276_REG_FIFO_TX_BASE_ADDR, 0x00);
 	if (ret < 0) {
@@ -267,7 +324,7 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 
 	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, 0x00);
 	if (ret < 0) {
-		LOG_ERR("Unable to write FIFO Tx addr pointer");
+		LOG_ERR("Unable to write FIFO addr pointer");
 		return -EIO;
 	}
 
@@ -402,8 +459,8 @@ static int sx1276_lora_config(struct device *dev,
 #endif
 	pa_config |= (config->tx_power & 0x0F);
 
-	//ret = sx1276_write(dev, SX1276_REG_PA_CONFIG, pa_config); 
-	ret = sx1276_write(dev, SX1276_REG_PA_CONFIG, 0xFF); 
+	ret = sx1276_write(dev, SX1276_REG_PA_CONFIG, pa_config); 
+	//ret = sx1276_write(dev, SX1276_REG_PA_CONFIG, 0xFF); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write PA config");
 		return -EIO;
@@ -447,9 +504,9 @@ static int sx1276_lora_config(struct device *dev,
 	LOG_INF("Modem config1: %x", regval);
 	regval &= ~SX1276_MODEM_CONFIG1_BW_MASK;
 	regval &= ~SX1276_MODEM_CONFIG1_CR_MASK;
-	regval |= (config->bandwidth << 4);
-	/* TODO */ regval |= 0x02;
 	regval &= ~SX1276_MODEM_CONFIG1_IMP_HDR;
+	regval |= (config->bandwidth << 4);
+	regval |= 0x02;
 	LOG_INF("Modem config1: %x", regval);
 	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG1, regval); 
 	if (ret < 0) {
@@ -466,7 +523,7 @@ static int sx1276_lora_config(struct device *dev,
 
 	regval &= ~SX1276_MODEM_CONFIG2_SF_MASK;
 	regval |= (config->spreading_factor << 4);
-//	regval |= 4;
+	/* CRC */regval |= 4;
 	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG2, regval); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write Modem Config2");
@@ -496,6 +553,44 @@ static int sx1276_lora_config(struct device *dev,
 	ret = sx1276_write(dev, SX1276_REG_INVERT_IQ2, 0x1D); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write Invert IQ");
+		return -EIO;
+	}
+
+	/* Set Detection optimize factor */
+	ret = sx1276_read(dev, SX1276_REG_DET_OPT, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read Detection Optimize");
+		return -EIO;
+	}
+
+	regval &= ~SX1276_DET_OPT_MASK;
+	if (config->spreading_factor == SF_6)
+		regval |= SX1276_DET_OPT_SF6;
+	else
+		regval |= SX1276_DET_OPT_SF7_SF12;
+
+	ret = sx1276_write(dev, SX1276_REG_DET_OPT, regval); 
+	if (ret < 0) {
+		LOG_ERR("Unable to write Detection Optimize");
+		return -EIO;
+	}
+
+	/* Set Detection threshold */
+	ret = sx1276_read(dev, SX1276_REG_DET_THRES, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read Detection threshold");
+		return -EIO;
+	}
+
+	regval &= ~SX1276_DET_THRES;
+	if (config->spreading_factor == SF_6)
+		regval |= SX1276_DET_THRES_SF6;
+	else
+		regval |= SX1276_DET_THRES_SF7_SF12;
+
+	ret = sx1276_write(dev, SX1276_REG_DET_THRES, regval); 
+	if (ret < 0) {
+		LOG_ERR("Unable to write Detection threshold");
 		return -EIO;
 	}
 

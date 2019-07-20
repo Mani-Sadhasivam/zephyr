@@ -45,8 +45,8 @@ void main(void)
 			return;
 		}
 
-		for (i = 0; i < len; i++)
-			LOG_INF("Received data: %d", data[i]);
+//		for (i = 0; i < len; i++)
+//			LOG_INF("Received data: %d", data[i]);
 
 		k_sleep(2000);
 	}
