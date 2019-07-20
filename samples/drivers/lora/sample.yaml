@@ -1,7 +1,0 @@
-sample:
-  description: Demonstration of the SX1276 LoRa driver
-  name: SX1276 sample
-tests:
-  test:
-    platform_whitelist: 96b_wistrio
-    tags: LORA

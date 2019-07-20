@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Linaro Limited
+ * Copyright (c) 2019 Manivannan Sadhasivam
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -10,16 +10,18 @@
 #include <misc/util.h>
 #include <zephyr.h>
 
+#define MAX_DATA_LEN 128
+
 #define LOG_LEVEL CONFIG_LOG_DEFAULT_LEVEL
 #include <logging/log.h>
-LOG_MODULE_REGISTER(lora_log);
+LOG_MODULE_REGISTER(lora_recv);
 
 void main(void)
 {
 	struct device *lora_dev;
 	struct lora_modem_config config;
 	int i, ret, len;
-	char data[255];
+	char data[MAX_DATA_LEN];
 
 	lora_dev = device_get_binding(DT_INST_0_SEMTECH_SX1276_LABEL);
 	if (!lora_dev) {
@@ -47,8 +49,9 @@ void main(void)
 			return;
 		}
 
+		LOG_INF("Received data:");
 		for (i = 0; i < len; i++)
-			LOG_INF("Received data: %d", data[i]);
+			LOG_INF("%c", data[i]);
 
 		k_sleep(2000);
 	}

@@ -1,0 +1,7 @@
+sample:
+  description: Demonstration of LoRa Send functionality
+  name: LoRa Send Sample
+tests:
+  test:
+    platform_whitelist: 96b_wistrio
+    tags: LORA

@@ -183,13 +183,14 @@ static int sx1276_lora_recv(struct device *dev, u8_t *data)
 	int ret;
 	u8_t regval, len, loc = 0;
 	
-	/* fix */
+	/* Clear all flags */
 	ret = sx1276_write(dev, SX1276_REG_IRQ_FLAGS, 0xFF);
 	if (ret < 0) {
 		LOG_ERR("Unable to write IRQ_FLAGS");
 		return -EIO;
 	}
 
+	/* Set DIO0 to Rx done */
 	ret = sx1276_read(dev, SX1276_REG_DIO_MAPPING1, &regval, 1);
 	if (ret < 0) {
 		LOG_ERR("Unable to read DIO_MAPPING1");
@@ -197,7 +198,7 @@ static int sx1276_lora_recv(struct device *dev, u8_t *data)
 	}
 
 	regval &= ~REG_DIO_MAPPING1_DIO0_MASK;
-	ret = sx1276_write(dev, SX1276_REG_DIO_MAPPING1, 0x00);//fix
+	ret = sx1276_write(dev, SX1276_REG_DIO_MAPPING1, regval);
 	if (ret < 0) {
 		LOG_ERR("Unable to write DIO_MAPPING1");
 		return -EIO;
@@ -221,6 +222,7 @@ static int sx1276_lora_recv(struct device *dev, u8_t *data)
 		return -EIO;
 	}
 
+	/* Make use of full FIFO for Rx */
 	ret = sx1276_write(dev, SX1276_REG_FIFO_RX_BASE_ADDR, 0x00);
 	if (ret < 0) {
 		LOG_ERR("Unable to write FIFO Rx base addr");
@@ -261,13 +263,13 @@ static int sx1276_lora_recv(struct device *dev, u8_t *data)
 		return -EIO;
 	}
 
-	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, (loc - 1));
+	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, loc);
 	if (ret < 0) {
 		LOG_ERR("Unable to write FIFO Tx addr pointer");
 		return -EIO;
 	}
 
-	ret = sx1276_fifo_read(dev, data, (len - 1));
+	ret = sx1276_fifo_read(dev, data, len);
 	if (ret < 0) {
 		LOG_ERR("Unable to read RX data");
 		return -EIO;
@@ -281,6 +283,7 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 	int ret;
 	u8_t regval;
 
+	/* Set DIO0 to Tx done */
 	ret = sx1276_read(dev, SX1276_REG_DIO_MAPPING1, &regval, 1);
 	if (ret < 0) {
 		LOG_ERR("Unable to read DIO_MAPPING1");
@@ -313,7 +316,7 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 		return -EIO;
 	}
 
-	/* Make use of full FIFO */
+	/* Make use of full FIFO for Tx */
 	ret = sx1276_write(dev, SX1276_REG_FIFO_TX_BASE_ADDR, 0x00);
 	if (ret < 0) {
 		LOG_ERR("Unable to write FIFO Tx base addr");
@@ -360,7 +363,6 @@ static int sx1276_lora_config(struct device *dev,
 	int ret;
 	u8_t regval, pa_config;
 
-	/* TODO: Set antenna pins to sleep mode */
 	/* Set sleep mode */
 	ret = sx1276_write(dev, SX1276_REG_OPMODE, SX1276_OPMODE_MODE_SLEEP); 
 	if (ret < 0) {
@@ -518,14 +520,6 @@ static int sx1276_lora_config(struct device *dev,
 		return -EIO;
 	}
 
-	/* TODO: Fix */
-	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG3, 0x04); 
-	if (ret < 0) {
-		LOG_ERR("Unable to write Modem Config3");
-		return -EIO;
-	}
-
-	/* fix */
 	ret = sx1276_write(dev, SX1276_REG_SYNC_WORD, 0x34); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write Sync Word");
@@ -538,7 +532,7 @@ static int sx1276_lora_config(struct device *dev,
 		return -EIO;
 	}
 
-	ret = sx1276_write(dev, SX1276_REG_INVERT_IQ2, 0x1D); 
+	ret = sx1276_write(dev, SX1276_REG_INVERT_IQ2, 0x1d); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write Invert IQ");
 		return -EIO;

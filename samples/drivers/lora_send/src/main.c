@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Linaro Limited
+ * Copyright (c) 2019 Manivannan Sadhasivam
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -10,11 +10,13 @@
 #include <misc/util.h>
 #include <zephyr.h>
 
+#define MAX_DATA_LEN 10
+
 #define LOG_LEVEL CONFIG_LOG_DEFAULT_LEVEL
 #include <logging/log.h>
 LOG_MODULE_REGISTER(lora_log);
 
-char data[26] = {25,25,25,25,5,5,5,5,5,5,5,5,5,25,5,5,5,5,5,5,5,25,5,5,5,5};
+char data[MAX_DATA_LEN] = {'h','e','l','l','o','w','o','r','l','d'};
 
 void main(void)
 {
@@ -41,16 +43,9 @@ void main(void)
 		return;
 	}
 
-//	while (1) {
-		LOG_INF("sending");
-		ret = lora_send(lora_dev, data, 26);
-		if (ret < 0) {
-			LOG_ERR("LoRa send failed");
-			return;
-		}
-
-		k_sleep(2000);
-//	}
-
-	while(1);
+	ret = lora_send(lora_dev, data, MAX_DATA_LEN);
+	if (ret < 0) {
+		LOG_ERR("LoRa send failed");
+		return;
+	}
 }
