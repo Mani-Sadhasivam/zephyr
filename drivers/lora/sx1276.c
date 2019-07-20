@@ -149,7 +149,6 @@ int sx1276_fifo_write(struct device *dev, u8_t *data, u32_t data_len)
 	int ret, i;
 
 	for (i = 0; i < data_len; i++) {
-		LOG_INF("Writing: %d", data[i]);
 		ret = sx1276_write(dev, SX1276_REG_FIFO, data[i]);
 		if (ret < 0) {
 			LOG_ERR("Unable to write FIFO");
@@ -172,7 +171,6 @@ int sx1276_fifo_read(struct device *dev, u8_t *data, u32_t data_len)
 			return -EIO;
 		}
 
-		LOG_INF("Received: %d", regval);
 		data[i] = regval;
 	}
 
@@ -458,29 +456,23 @@ static int sx1276_lora_config(struct device *dev,
 	}
 #endif
 	pa_config |= (config->tx_power & 0x0F);
-
 	ret = sx1276_write(dev, SX1276_REG_PA_CONFIG, pa_config); 
-	//ret = sx1276_write(dev, SX1276_REG_PA_CONFIG, 0xFF); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write PA config");
 		return -EIO;
 	}
 
-	ret = sx1276_write(dev, SX1276_REG_LNA, 0x23); 
+	ret = sx1276_write(dev, SX1276_REG_PREAMBLE_MSB,
+			   (config->preamble_len >> 8) & 0xFF);
 	if (ret < 0) {
-		LOG_ERR("Unable to write LNA");
+		LOG_ERR("Unable to write Preamble MSB");
 		return -EIO;
 	}
 
-	/* Fix */ret = sx1276_write(dev, SX1276_REG_PREAMBLE_MSB, 0x00); 
+	ret = sx1276_write(dev, SX1276_REG_PREAMBLE_LSB,
+			   config->preamble_len & 0xFF); 
 	if (ret < 0) {
-		LOG_ERR("Unable to write Preamble");
-		return -EIO;
-	}
-
-	/* Fix */ret = sx1276_write(dev, SX1276_REG_PREAMBLE_LSB, 0x08); 
-	if (ret < 0) {
-		LOG_ERR("Unable to write Preamble");
+		LOG_ERR("Unable to write Preamble LSB");
 		return -EIO;
 	}
 
@@ -501,13 +493,10 @@ static int sx1276_lora_config(struct device *dev,
 		return -EIO;
 	}
 
-	LOG_INF("Modem config1: %x", regval);
 	regval &= ~SX1276_MODEM_CONFIG1_BW_MASK;
 	regval &= ~SX1276_MODEM_CONFIG1_CR_MASK;
 	regval &= ~SX1276_MODEM_CONFIG1_IMP_HDR;
-	regval |= (config->bandwidth << 4);
-	regval |= 0x02;
-	LOG_INF("Modem config1: %x", regval);
+	regval |= ((config->bandwidth << 4) | (config->coding_rate << 1));
 	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG1, regval); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write Modem Config1");
@@ -522,8 +511,7 @@ static int sx1276_lora_config(struct device *dev,
 	}
 
 	regval &= ~SX1276_MODEM_CONFIG2_SF_MASK;
-	regval |= (config->spreading_factor << 4);
-	/* CRC */regval |= 4;
+	regval |= ((config->spreading_factor << 4) | 4);
 	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG2, regval); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write Modem Config2");
@@ -612,16 +600,16 @@ static void sx1276_irq_callback(struct device *dev,
 	}
 
 	if (regval & LORA_REG_IRQ_FLAGS_TX_DONE) {
-		LOG_INF("TX IRQ");
+		LOG_DBG("TX IRQ");
 	}
 
 	if (regval & LORA_REG_IRQ_FLAGS_RX_DONE) {
-		LOG_INF("RX IRQ");
+		LOG_DBG("RX IRQ");
 		if (regval & 0x20)
-			LOG_ERR("Payload CRC Error");
+			LOG_DBG("Payload CRC Error");
 
 		if (regval & 0x10)
-			LOG_ERR("Valid header found");
+			LOG_DBG("Valid header found");
 		else
 			LOG_ERR("No Valid header found");
 	}

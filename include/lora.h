@@ -38,10 +38,19 @@ enum lora_spreading_factor {
 	SF_12,
 };
 
+enum lora_coding_rate {
+	CR_4_5 = 1,
+	CR_4_6 = 2,
+	CR_4_7 = 3,
+	CR_4_8 = 4,
+};
+
 struct lora_modem_config {
 	u32_t frequency;
 	int bandwidth;
 	int spreading_factor;
+	int preamble_len;
+	int coding_rate;
 	int tx_power;
 };
 

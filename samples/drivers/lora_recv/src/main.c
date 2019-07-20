@@ -30,6 +30,8 @@ void main(void)
 	config.frequency = 868100000;
 	config.bandwidth = BW_125_KHZ;
 	config.spreading_factor = SF_10;
+	config.preamble_len = 8;
+	config.coding_rate = CR_4_5;
 	config.tx_power = 14;
 
 	ret = lora_config(lora_dev, &config);
@@ -45,8 +47,8 @@ void main(void)
 			return;
 		}
 
-//		for (i = 0; i < len; i++)
-//			LOG_INF("Received data: %d", data[i]);
+		for (i = 0; i < len; i++)
+			LOG_INF("Received data: %d", data[i]);
 
 		k_sleep(2000);
 	}
