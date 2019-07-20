@@ -34,6 +34,7 @@ LOG_MODULE_REGISTER(sx1276);
 #define SX1276_REG_PREAMBLE_LSB			0x21
 #define SX1276_REG_PAYLOAD_LENGTH		0x22
 #define SX1276_REG_MODEM_CONFIG3		0x26
+#define SX1276_REG_INVERT_IQ			0x33
 #define SX1276_REG_SYNC_WORD			0x39
 #define SX1276_REG_DIO_MAPPING1			0x40
 #define SX1276_REG_DIO_MAPPING2			0x41
@@ -51,6 +52,7 @@ LOG_MODULE_REGISTER(sx1276);
 
 #define SX1276_MODEM_CONFIG1_BW_MASK		GENMASK(7, 4)
 #define SX1276_MODEM_CONFIG1_CR_MASK		GENMASK(3, 1)
+#define SX1276_MODEM_CONFIG1_IMP_HDR		BIT(0)
 #define SX1276_MODEM_CONFIG2_SF_MASK		GENMASK(7, 4)
 #define SX1276_PA_CONFIG_PA_BOOST		BIT(7)
 
@@ -137,6 +139,7 @@ int sx1276_fifo_write(struct device *dev, u8_t *data, u32_t data_len)
 	int ret, i;
 
 	for (i = 0; i < data_len; i++) {
+		LOG_INF("Writing: %d", data[i]);
 		ret = sx1276_write(dev, SX1276_REG_FIFO, data[i]);
 		if (ret < 0) {
 			LOG_ERR("Unable to write FIFO");
@@ -277,12 +280,12 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 		return ret;
 
 	/* Clear all IRQs */
-	ret = sx1276_write(dev, SX1276_REG_IRQ_FLAGS, 0xFF);
+/*	ret = sx1276_write(dev, SX1276_REG_IRQ_FLAGS, 0xFF);
 	if (ret < 0) {
 		LOG_ERR("Unable to write IRQ_FLAGS");
 		return -EIO;
 	}
-/*
+
 	ret = sx1276_read(dev, SX1276_REG_IRQ_FLAGS_MASK, &regval, 1);
 	if (ret < 0) {
 		LOG_ERR("Unable to read IRQ_FLAGS_MASK");
@@ -473,10 +476,13 @@ static int sx1276_lora_config(struct device *dev,
 		return -EIO;
 	}
 
+	LOG_INF("Modem config1: %x", regval);
 	regval &= ~SX1276_MODEM_CONFIG1_BW_MASK;
 	regval &= ~SX1276_MODEM_CONFIG1_CR_MASK;
 	regval |= (config->bandwidth << 4);
 	/* TODO */ regval |= 0x02;
+	regval &= ~SX1276_MODEM_CONFIG1_IMP_HDR;
+	LOG_INF("Modem config1: %x", regval);
 	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG1, regval); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write Modem Config1");
@@ -492,7 +498,7 @@ static int sx1276_lora_config(struct device *dev,
 
 	regval &= ~SX1276_MODEM_CONFIG2_SF_MASK;
 	regval |= (config->spreading_factor << 4);
-	/* crc fix */regval |= 4;
+	regval |= 4;
 	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG2, regval); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write Modem Config2");
@@ -500,16 +506,22 @@ static int sx1276_lora_config(struct device *dev,
 	}
 
 	/* TODO: Fix */
-	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG3, 0x0C); 
-	if (ret < 0) {
-		LOG_ERR("Unable to write Modem Config3");
-		return -EIO;
-	}
+//	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG3, 0x0C); 
+//	if (ret < 0) {
+//		LOG_ERR("Unable to write Modem Config3");
+//		return -EIO;
+//	}
 
 	/* fix */
 	ret = sx1276_write(dev, SX1276_REG_SYNC_WORD, 0x34); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write Sync Word");
+		return -EIO;
+	}
+
+	ret = sx1276_write(dev, SX1276_REG_INVERT_IQ, 0x27); 
+	if (ret < 0) {
+		LOG_ERR("Unable to write Invert IQ");
 		return -EIO;
 	}
 

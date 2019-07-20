@@ -20,7 +20,7 @@ void main(void)
 {
 	struct device *lora_dev;
 	struct lora_modem_config config;
-	int ret;
+	int i, ret, len;
 
 	lora_dev = device_get_binding(DT_INST_0_SEMTECH_SX1276_LABEL);
 	if (!lora_dev) {
@@ -40,16 +40,16 @@ void main(void)
 	}
 
 	while (1) {
-		LOG_INF("receiving");
-		ret = lora_recv(lora_dev, data, 13);
+		len = 13;
+		ret = lora_recv(lora_dev, data, len);
 		if (ret < 0) {
 			LOG_ERR("LoRa send failed");
 			return;
 		}
 
-		LOG_INF("Received data: %d %d", data[0], data[1]);
+		for (i = 0; i < len; i++)
+			LOG_INF("Received data: %d", data[i]);
+
 		k_sleep(2000);
 	}
-
-	while(1);
 }
