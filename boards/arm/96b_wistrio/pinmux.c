@@ -35,7 +35,6 @@ static const struct pin_config pinconf[] = {
 	{STM32_PIN_PA11, STM32_PUSHPULL_PULLUP},
 	{STM32_PIN_PB6, STM32_PUSHPULL_PULLUP},
 	{STM32_PIN_PB7, STM32_PUSHPULL_PULLUP},
-//	{STM32_PIN_PH1, STM32_PUSHPULL_NOPULL},
 };
 
 static int pinmux_stm32_init(struct device *port)
@@ -46,10 +45,21 @@ static int pinmux_stm32_init(struct device *port)
 
 	struct device *gpioa =
 	       device_get_binding(DT_ST_STM32_GPIO_40020000_LABEL);
+	if (!gpioa) {
+		return -ENODEV;
+	}
+
 	struct device *gpiob =
 	       device_get_binding(DT_ST_STM32_GPIO_40020400_LABEL);
+	if (!gpiob) {
+		return -ENODEV;
+	}
+
 	struct device *gpioh =
 	       device_get_binding(DT_ST_STM32_GPIO_40021400_LABEL);
+	if (!gpioh) {
+		return -ENODEV;
+	}
 
 	gpio_pin_configure(gpioa, 4, GPIO_DIR_OUT);
 	gpio_pin_write(gpioa, 4, 1);
@@ -66,4 +76,4 @@ static int pinmux_stm32_init(struct device *port)
 	return 0;
 }
 
-SYS_INIT(pinmux_stm32_init, PRE_KERNEL_1, CONFIG_PINMUX_STM32_DEVICE_INITIALIZATION_PRIORITY);
+SYS_INIT(pinmux_stm32_init, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);

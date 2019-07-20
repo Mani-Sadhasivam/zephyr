@@ -14,13 +14,12 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(lora_log);
 
-char data[13];
-
 void main(void)
 {
 	struct device *lora_dev;
 	struct lora_modem_config config;
 	int i, ret, len;
+	char data[255];
 
 	lora_dev = device_get_binding(DT_INST_0_SEMTECH_SX1276_LABEL);
 	if (!lora_dev) {
@@ -40,9 +39,8 @@ void main(void)
 	}
 
 	while (1) {
-		len = 13;
-		ret = lora_recv(lora_dev, data, len);
-		if (ret < 0) {
+		len = lora_recv(lora_dev, data);
+		if (len < 0) {
 			LOG_ERR("LoRa send failed");
 			return;
 		}

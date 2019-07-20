@@ -14,7 +14,7 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(lora_log);
 
-char data[13] = {0,1,2,3,4,5,6,7,8,9,10,11,12};
+char data[26] = {25,25,25,25,5,5,5,5,5,5,5,5,5,25,5,5,5,5,5,5,5,25,5,5,5,5};
 
 void main(void)
 {
@@ -41,7 +41,7 @@ void main(void)
 
 //	while (1) {
 		LOG_INF("sending");
-		ret = lora_send(lora_dev, data, 13);
+		ret = lora_send(lora_dev, data, 26);
 		if (ret < 0) {
 			LOG_ERR("LoRa send failed");
 			return;

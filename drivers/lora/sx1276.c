@@ -36,6 +36,7 @@ LOG_MODULE_REGISTER(sx1276);
 #define SX1276_REG_MODEM_CONFIG3		0x26
 #define SX1276_REG_INVERT_IQ			0x33
 #define SX1276_REG_SYNC_WORD			0x39
+#define SX1276_REG_INVERT_IQ2			0x3b
 #define SX1276_REG_DIO_MAPPING1			0x40
 #define SX1276_REG_DIO_MAPPING2			0x41
 #define SX1276_REG_VERSION			0x42
@@ -168,7 +169,7 @@ int sx1276_fifo_read(struct device *dev, u8_t *data, u32_t data_len)
 	return 0;
 }
 
-static int sx1276_lora_recv(struct device *dev, u8_t *data, u32_t data_len)
+static int sx1276_lora_recv(struct device *dev, u8_t *data)
 {
 	struct sx1276_data *dev_data = dev->driver_data;
 	int ret;
@@ -210,15 +211,15 @@ static int sx1276_lora_recv(struct device *dev, u8_t *data, u32_t data_len)
 
 	k_sem_take(&dev_data->data_sem, K_FOREVER);
 
-	ret = sx1276_read(dev, SX1276_REG_FIFO_RX_CUR_ADDR, &loc, 1);
-	if (ret < 0) {
-		LOG_ERR("Unable to read RX curr addr");
-		return -EIO;
-	}
-	
 	ret = sx1276_read(dev, SX1276_REG_RX_NB_BYTES, &regval, 1);
 	if (ret < 0) {
 		LOG_ERR("Unable to read RX len");
+		return -EIO;
+	}
+	
+	ret = sx1276_read(dev, SX1276_REG_FIFO_RX_CUR_ADDR, &loc, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read RX curr addr");
 		return -EIO;
 	}
 	
@@ -235,13 +236,13 @@ static int sx1276_lora_recv(struct device *dev, u8_t *data, u32_t data_len)
 		return -EIO;
 	}
 
-	return 0;
+	return regval;
 }
 
 static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 {
 	int ret;
-	u8_t regval, fifo_ptr;
+	u8_t regval;
 
 	ret = sx1276_read(dev, SX1276_REG_DIO_MAPPING1, &regval, 1);
 	if (ret < 0) {
@@ -257,13 +258,14 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 		return -EIO;
 	}
 
-	ret = sx1276_read(dev, SX1276_REG_FIFO_TX_BASE_ADDR, &fifo_ptr, 1);
+	/* Make use of full FIFO */
+	ret = sx1276_write(dev, SX1276_REG_FIFO_TX_BASE_ADDR, 0x00);
 	if (ret < 0) {
-		LOG_ERR("Unable to read FIFO Tx base addr");
+		LOG_ERR("Unable to write FIFO Tx base addr");
 		return -EIO;
 	}
 
-	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, fifo_ptr);
+	ret = sx1276_write(dev, SX1276_REG_FIFO_ADDR_PTR, 0x00);
 	if (ret < 0) {
 		LOG_ERR("Unable to write FIFO Tx addr pointer");
 		return -EIO;
@@ -279,26 +281,6 @@ static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 	if (ret < 0)
 		return ret;
 
-	/* Clear all IRQs */
-/*	ret = sx1276_write(dev, SX1276_REG_IRQ_FLAGS, 0xFF);
-	if (ret < 0) {
-		LOG_ERR("Unable to write IRQ_FLAGS");
-		return -EIO;
-	}
-
-	ret = sx1276_read(dev, SX1276_REG_IRQ_FLAGS_MASK, &regval, 1);
-	if (ret < 0) {
-		LOG_ERR("Unable to read IRQ_FLAGS_MASK");
-		return -EIO;
-	}
-
-	regval &= ~LORA_REG_IRQ_FLAGS_TX_DONE;
-	ret = sx1276_write(dev, SX1276_REG_IRQ_FLAGS_MASK, regval);
-	if (ret < 0) {
-		LOG_ERR("Unable to write IRQ_FLAGS_MASK");
-		return -EIO;
-	}
-*/
 	ret = sx1276_read(dev, SX1276_REG_OPMODE, &regval, 1);
 	if (ret < 0) {
 		LOG_ERR("Unable to read OPMODE");
@@ -368,28 +350,14 @@ static int sx1276_lora_config(struct device *dev,
 
 	/* Set frequency */		
 	freq_rf = config->frequency;;
-//	freq_rf *= (1 << 19);
-//	freq_rf /= CLOCK_FREQ;
-	freq_rf = ( uint32_t )( ( double )freq_rf / ( double ) 61.035);
+	freq_rf *= (1 << 19);
+	freq_rf /= CLOCK_FREQ;
 
-	/*TODO: remove comment
 	ret = sx1276_write(dev, SX1276_REG_FRF_MSB, (freq_rf >> 16 & 0xFF));
 	if (!ret)
 		ret = sx1276_write(dev, SX1276_REG_FRF_MID, (freq_rf >> 8 & 0xFF));
 	if (!ret)
 		ret = sx1276_write(dev, SX1276_REG_FRF_LSB, (freq_rf & 0xFF));
-	if (ret) {
-		LOG_ERR("Unable to write RF carrier frequency");
-		return -EIO;
-	}
-	*/
-
-	//REMOVE
-	ret = sx1276_write(dev, SX1276_REG_FRF_MSB, (0xD9 & 0xFF));
-	if (!ret)
-		ret = sx1276_write(dev, SX1276_REG_FRF_MID, (0x06 & 0xFF));
-	if (!ret)
-		ret = sx1276_write(dev, SX1276_REG_FRF_LSB, (0x8B & 0xFF));
 	if (ret) {
 		LOG_ERR("Unable to write RF carrier frequency");
 		return -EIO;
@@ -401,7 +369,7 @@ static int sx1276_lora_config(struct device *dev,
 		LOG_ERR("Unable to read version PA config");
 		return -EIO;
 	}
-/*
+
 	pa_config &= ~GENMASK(3, 0);
 #if defined CONFIG_PA_RFO_PIN
 	pa_config &= ~SX1276_PA_CONFIG_PA_BOOST;
@@ -446,7 +414,7 @@ static int sx1276_lora_config(struct device *dev,
 		LOG_ERR("Unable to write LNA");
 		return -EIO;
 	}
-*/
+
 	/* Fix */ret = sx1276_write(dev, SX1276_REG_PREAMBLE_MSB, 0x00); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write Preamble");
@@ -498,7 +466,7 @@ static int sx1276_lora_config(struct device *dev,
 
 	regval &= ~SX1276_MODEM_CONFIG2_SF_MASK;
 	regval |= (config->spreading_factor << 4);
-	regval |= 4;
+//	regval |= 4;
 	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG2, regval); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write Modem Config2");
@@ -506,11 +474,11 @@ static int sx1276_lora_config(struct device *dev,
 	}
 
 	/* TODO: Fix */
-//	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG3, 0x0C); 
-//	if (ret < 0) {
-//		LOG_ERR("Unable to write Modem Config3");
-//		return -EIO;
-//	}
+	ret = sx1276_write(dev, SX1276_REG_MODEM_CONFIG3, 0x04); 
+	if (ret < 0) {
+		LOG_ERR("Unable to write Modem Config3");
+		return -EIO;
+	}
 
 	/* fix */
 	ret = sx1276_write(dev, SX1276_REG_SYNC_WORD, 0x34); 
@@ -520,6 +488,12 @@ static int sx1276_lora_config(struct device *dev,
 	}
 
 	ret = sx1276_write(dev, SX1276_REG_INVERT_IQ, 0x27); 
+	if (ret < 0) {
+		LOG_ERR("Unable to write Invert IQ");
+		return -EIO;
+	}
+
+	ret = sx1276_write(dev, SX1276_REG_INVERT_IQ2, 0x1D); 
 	if (ret < 0) {
 		LOG_ERR("Unable to write Invert IQ");
 		return -EIO;
@@ -617,27 +591,6 @@ static int sx1276_lora_init(struct device *dev)
 		return -EIO;
 	}
 	gpio_pin_enable_callback(data->dio0, GPIO_DIO0_PIN);
-
-/*********************/
-	struct device *gpioa =
-	       device_get_binding(DT_ST_STM32_GPIO_40020000_LABEL);
-	struct device *gpiob =
-	       device_get_binding(DT_ST_STM32_GPIO_40020400_LABEL);
-	struct device *gpioh =
-	       device_get_binding(DT_ST_STM32_GPIO_40021400_LABEL);
-
-	gpio_pin_configure(gpioa, 4, GPIO_DIR_OUT);
-	gpio_pin_write(gpioa, 4, 1);
-
-	gpio_pin_configure(gpiob, 6, GPIO_DIR_OUT);
-	gpio_pin_write(gpiob, 6, 1);
-
-	gpio_pin_configure(gpiob, 7, GPIO_DIR_OUT);
-	gpio_pin_write(gpiob, 7, 0);
-
-	gpio_pin_configure(gpioh, 1, GPIO_DIR_OUT);
-	gpio_pin_write(gpioh, 1, 1);
-/***********************/
 
 	/* Setup Reset gpio */
 	reset_dev = device_get_binding(
