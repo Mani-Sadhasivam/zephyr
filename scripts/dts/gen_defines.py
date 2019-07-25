@@ -82,6 +82,7 @@ def main():
     write_addr_size(edt, "zephyr,sram", "SRAM")
     write_addr_size(edt, "zephyr,ccm", "CCM")
     write_addr_size(edt, "zephyr,dtcm", "DTCM")
+    write_addr_size(edt, "zephyr,ipc_shm", "IPC_SHM")
 
     # NOTE: These defines aren't used by the code and just used by
     # the kconfig build system, we can remove them in the future
