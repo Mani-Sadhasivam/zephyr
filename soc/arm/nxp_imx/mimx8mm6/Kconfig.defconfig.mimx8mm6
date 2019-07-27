@@ -22,6 +22,13 @@ config CLOCK_CONTROL_MCUX_CCM
 
 endif # CLOCK_CONTROL
 
+if GPIO
+
+config GPIO_MCUX_IGPIO
+	default y if HAS_MCUX_IGPIO
+
+endif # GPIO
+
 if PINMUX
 
 config PINMUX_MCUX

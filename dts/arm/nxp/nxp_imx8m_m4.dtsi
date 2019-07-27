@@ -6,6 +6,7 @@
 
 #include <arm/armv7-m.dtsi>
 #include <dt-bindings/clock/imx_ccm.h>
+#include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/rdc/imx_rdc.h>
 
 / {
@@ -39,6 +40,15 @@
 			label = "CCM";
 
 			#clock-cells = <3>;
+		};
+
+		gpio3: gpio@30220000 {
+			compatible = "nxp,imx-gpio";
+			reg = <0x30220000 0x10000>;
+			interrupts = <68 0>, <69 0>;
+			label = "GPIO_3";
+			gpio-controller;
+			#gpio-cells = <2>;
 		};
 
 		/* For now only uart2 is supported and
