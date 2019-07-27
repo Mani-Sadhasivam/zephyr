@@ -1,0 +1,22 @@
+# Kconfig - MCUXpresso SDK UART
+#
+# Copyright (c) 2017, NXP
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+menuconfig UART_MCUX_IMX
+	bool "MCUX IMX uart driver"
+	depends on HAS_MCUX && CLOCK_CONTROL
+	select SERIAL_HAS_DRIVER
+	help
+	  Enable the MCUX uart driver.
+
+if UART_MCUX_IMX
+
+menuconfig UART_MCUX_IMX_4
+	bool "UART 4"
+	help
+	  Enable UART 4.
+
+endif # UART_MCUX_IMX

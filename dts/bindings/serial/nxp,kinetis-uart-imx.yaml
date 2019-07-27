@@ -1,0 +1,24 @@
+
+title: Kinetis IMX UART
+version: 0.1
+
+description: >
+    This binding gives a base representation of the Kinetis IMX UART
+
+inherits:
+    !include uart.yaml
+
+properties:
+    compatible:
+      constraint: "nxp,kinetis-imx-uart"
+
+    reg:
+      category: required
+
+    interrupts:
+      category: required
+
+    clocks:
+      type: array
+      category: required
+      description: Clock gate information
