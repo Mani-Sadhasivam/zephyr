@@ -24,21 +24,20 @@
 	soc {
 		tcml_code: code@1ffe0000 {
 			compatible = "nxp,imx-itcm";
-			reg = <0x1ffe0000 0x8000>;
+			reg = <0x1ffe0000 0x20000>;
 			label = "TCML CODE";
 		};
 
 		tcmu_sys: memory@20000000 {
 			compatible = "nxp,imx-dtcm";
-			reg = <0x20000000 0x8000>;
+			reg = <0x20000000 0x20000>;
 			label = "TCMU SYSTEM";
 		};
 
-		ccm: ccm@400fc000 {
+		ccm: ccm@30380000 {
 			compatible = "nxp,imx-ccm";
-			reg = <0x400fc000 0x4000>;
+			reg = <0x30380000 0x10000>;
 			label = "CCM";
-
 			#clock-cells = <3>;
 		};
 
