@@ -10,6 +10,13 @@ if BOARD_MIMX8MM6_EVK
 config BOARD
 	default "mimx8mm6_evk"
 
+if GPIO_MCUX_IGPIO
+
+config GPIO_MCUX_IGPIO_3
+	default y
+
+endif # GPIO_MCUX_IGPIO
+
 if UART_MCUX_IMX
 
 config UART_MCUX_IMX_4

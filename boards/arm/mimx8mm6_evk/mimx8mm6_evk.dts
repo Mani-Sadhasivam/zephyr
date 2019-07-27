@@ -13,6 +13,7 @@
 	compatible = "nxp,mimx8mm6m_evk";
 
 	aliases {
+		led0 = &green_led;
 		uart-4 = &uart4;
 	};
 
@@ -21,6 +22,14 @@
 		zephyr,sram = &tcmu_sys;
 		zephyr,console = &uart4;
 		zephyr,shell-uart = &uart4;
+	};
+
+	leds {
+		compatible = "gpio-leds";
+		green_led: led-1 {
+			gpios = <&gpio3 16 GPIO_INT_ACTIVE_HIGH>;
+			label = "User LD1";
+		};
 	};
 };
 
