@@ -17,6 +17,13 @@ config GPIO_MCUX_IGPIO_3
 
 endif # GPIO_MCUX_IGPIO
 
+if I2C_MCUX
+
+config I2C_3
+	default y
+
+endif # I2C_MCUX
+
 if UART_MCUX_IMX
 
 config UART_MCUX_IMX_4
