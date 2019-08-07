@@ -29,6 +29,13 @@ config GPIO_MCUX_IGPIO
 
 endif # GPIO
 
+if I2C
+
+config I2C_MCUX
+	default y
+
+endif # I2C
+
 if PINMUX
 
 config PINMUX_MCUX

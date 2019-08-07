@@ -134,6 +134,11 @@ static int nxp_mimx8mm6_init(struct device *arg)
 	/* SoC specific Clock settings */
 	SOC_ClockInit();
 
+#ifdef CONFIG_I2C_3
+	CLOCK_SetRootMux(kCLOCK_RootI2c3, kCLOCK_I2cRootmuxSysPll1Div5);
+	CLOCK_SetRootDivider(kCLOCK_RootI2c3, 1U, 10U);
+#endif
+
 	return 0;
 }
 

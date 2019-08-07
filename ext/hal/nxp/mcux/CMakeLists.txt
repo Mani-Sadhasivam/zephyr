@@ -36,6 +36,7 @@ zephyr_compile_definitions(${MCUX_CPU})
 # build scripts for every mcux device.
 zephyr_sources(devices/${MCUX_DEVICE}/fsl_clock.c)
 zephyr_sources(devices/${MCUX_DEVICE}/fsl_uart.c)
+zephyr_sources(devices/${MCUX_DEVICE}/fsl_i2c.c)
 if (${MCUX_DEVICE} MATCHES "LPC")
   zephyr_sources(devices/${MCUX_DEVICE}/fsl_power.c)
   zephyr_sources(devices/${MCUX_DEVICE}/fsl_reset.c)
