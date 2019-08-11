@@ -42,6 +42,13 @@
 			#clock-cells = <3>;
 		};
 
+		dma0: dma@30bd0000 {
+			compatible = "nxp,mcux-dma";
+			reg = <0x30bd0000 0x10000>;
+			interrupts = <2 0>;
+			label = "DMA_0";
+		};
+
 		gpio3: gpio@30220000 {
 			compatible = "nxp,imx-gpio";
 			reg = <0x30220000 0x10000>;

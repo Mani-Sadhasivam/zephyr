@@ -1,0 +1,19 @@
+
+title: NXP MCUX DMA binding
+version: 0.1
+
+description: >
+    Binding for the NXP MCUX DMA controller.
+
+inherits:
+    !include base.yaml
+
+properties:
+    compatible:
+      constraint: "nxp,mcux-dma"
+
+    reg:
+      category: required
+
+    interrupts:
+      category: required
