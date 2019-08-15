@@ -97,6 +97,10 @@ static int mcux_ccm_get_subsys_rate(struct device *dev,
 		*rate = (CLOCK_GetPllFreq(kCLOCK_SystemPll1Ctrl) / (CLOCK_GetRootPreDivider(kCLOCK_RootI2c3)) / (CLOCK_GetRootPostDivider(kCLOCK_RootI2c3)) / 5);
 		break;
 
+	case IMX_CCM_I2S_CLK:
+		*rate = (CLOCK_GetPllFreq(kCLOCK_AudioPll1Ctrl) / (CLOCK_GetRootPreDivider(kCLOCK_RootSai3)) / (CLOCK_GetRootPostDivider(kCLOCK_RootSai3)));
+		break;
+
 	case IMX_CCM_UART_CLK:
 		*rate = CLOCK_GetPllFreq(kCLOCK_SystemPll1Ctrl) / (CLOCK_GetRootPreDivider(kCLOCK_RootUart4)) / (CLOCK_GetRootPostDivider(kCLOCK_RootUart4)) / 10;
 		break;

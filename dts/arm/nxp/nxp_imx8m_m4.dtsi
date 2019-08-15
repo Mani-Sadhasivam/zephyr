@@ -58,6 +58,15 @@
 			#gpio-cells = <2>;
 		};
 
+		gpio5: gpio@30240000 {
+			compatible = "nxp,imx-gpio";
+			reg = <0x30240000 0x10000>;
+			interrupts = <72 0>, <73 0>;
+			label = "GPIO_5";
+			gpio-controller;
+			#gpio-cells = <2>;
+		};
+
 		i2c3: i2c@30a40000 {
 			compatible = "nxp,kinetis-i2c";
 			clock-frequency = <I2C_BITRATE_STANDARD>;
@@ -67,6 +76,17 @@
 			interrupts = <37 0>;
 			clocks = <&ccm IMX_CCM_I2C_CLK 0x6c 24>;
 			label = "I2C_3";
+			status = "disabled";
+		};
+
+		i2s3: i2cs@30030000 {
+			compatible = "nxp,kinetis-i2s";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x30030000 0x10000>;
+			interrupts = <50 0>;
+			clocks = <&ccm IMX_CCM_I2S_CLK 0x6c 24>;
+			label = "I2S_3";
 			status = "disabled";
 		};
 

@@ -251,6 +251,11 @@ static int nxp_mimx8mm6_init(struct device *arg)
 	CLOCK_SetRootDivider(kCLOCK_RootI2c3, 1U, 10U);
 #endif
 
+#ifdef CONFIG_I2S_3
+	CLOCK_SetRootMux(kCLOCK_RootSai3, kCLOCK_SaiRootmuxAudioPll1); /* Set SAI source to AUDIO PLL1 786432000HZ*/
+	CLOCK_SetRootDivider(kCLOCK_RootSai3, 1U, 32U);
+#endif
+
 	return 0;
 }
 

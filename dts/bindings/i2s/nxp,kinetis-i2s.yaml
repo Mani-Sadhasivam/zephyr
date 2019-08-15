@@ -1,0 +1,27 @@
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+title: Kinetis I2S Controller
+version: 0.1
+
+description: >
+    This is a representation of the Kinetis I2S nodes
+
+inherits:
+    !include i2s.yaml
+
+properties:
+    compatible:
+      constraint: "nxp,kinetis-i2s"
+
+    reg:
+      category: required
+
+    interrupts:
+      category: required
+
+    clocks:
+      type: array
+      category: required
+      description: Clock gate information

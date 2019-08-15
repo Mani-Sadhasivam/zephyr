@@ -43,6 +43,13 @@ config I2C_MCUX
 
 endif # I2C
 
+if I2S
+
+config I2S_MCUX
+	default y
+
+endif # I2S
+
 if PINMUX
 
 config PINMUX_MCUX

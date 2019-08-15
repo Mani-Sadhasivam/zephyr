@@ -17,5 +17,6 @@
 #define IMX_CCM_USDHC2_CLK		7
 #define IMX_CCM_UART_CLK		8
 #define IMX_CCM_I2C_CLK			9
+#define IMX_CCM_I2S_CLK			10
 
 #endif /* ZEPHYR_INCLUDE_DT_BINDINGS_CLOCK_IMX_CCM_H_ */

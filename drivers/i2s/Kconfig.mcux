@@ -1,0 +1,31 @@
+# Kconfig - NXP MCUX I2S configuration options
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+menuconfig I2S_MCUX
+	bool "Intel I2S (SSP) Bus Driver"
+	help
+	  Enable Inter Sound (I2S) bus driver for NXP MCUs.
+
+if I2S_MCUX
+
+config I2S_3
+	bool "I2S port 3"
+	help
+	  Enable I2S controller port 3.
+
+config I2S_DMA
+	bool "I2S MCUX DMA"
+	help
+	  Use DMA for I2S transfers.
+
+config SAI_DMA_IRQ
+	int "I2S DMA IRQ"
+	default 103
+
+config SAI_DMA_IRQ_PRI
+	int "I2S DMA IRQ Priority"
+	default 1
+
+endif # I2S_MCUX
