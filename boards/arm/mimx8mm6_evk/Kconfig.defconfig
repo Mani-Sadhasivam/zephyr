@@ -15,6 +15,9 @@ if GPIO_MCUX_IGPIO
 config GPIO_MCUX_IGPIO_3
 	default y
 
+config GPIO_MCUX_IGPIO_5
+	default y
+
 endif # GPIO_MCUX_IGPIO
 
 if I2C_MCUX
@@ -23,6 +26,13 @@ config I2C_3
 	default y
 
 endif # I2C_MCUX
+
+if I2S_MCUX
+
+config I2S_3
+	default y
+
+endif # I2S_MCUX
 
 if UART_MCUX_IMX
 

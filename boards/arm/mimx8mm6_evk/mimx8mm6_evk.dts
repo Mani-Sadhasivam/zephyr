@@ -38,6 +38,10 @@
 	status = "okay";
 };
 
+&i2s3 {
+	status = "okay";
+};
+
 &uart4 {
 	status = "okay";
 	current-speed = <115200>;
