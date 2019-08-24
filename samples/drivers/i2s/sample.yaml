@@ -1,0 +1,6 @@
+sample:
+  name: I2S sample
+tests:
+  sample.driver.i2s:
+    tags: drivers
+    depends_on: i2s
