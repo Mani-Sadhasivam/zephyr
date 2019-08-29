@@ -92,7 +92,7 @@ manifest:
       revision: 81d50b7d15340dfa034bfff9c98527f5b661b84e
       path: modules/hal/nxp
     - name: open-amp
-      revision: 9b591b289e1f37339bd038b5a1f0e6c8ad39c63a
+      revision: 994aadf17908394e495d5c9edefa656169672668
       path: modules/lib/open-amp
     - name: openthread
       revision: 0dbecf508e7a79aae8ed9631f1a63fc65478b213
