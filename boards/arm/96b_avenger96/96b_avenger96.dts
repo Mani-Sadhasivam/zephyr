@@ -48,6 +48,11 @@
 	};
 };
 
+&i2c1 {
+	status = "okay";
+	clock-frequency = <I2C_BITRATE_FAST>;
+};
+
 &mailbox {
 	status = "okay";
 };

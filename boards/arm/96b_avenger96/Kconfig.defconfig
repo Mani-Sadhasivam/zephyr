@@ -10,6 +10,13 @@ if BOARD_96B_AVENGER96
 config BOARD
 	default "96b_avenger96"
 
+if I2C
+
+config I2C_1
+	default y
+
+endif # I2C
+
 if UART_CONSOLE
 
 config UART_7
