@@ -1,187 +1,256 @@
-#include <gpio.h>
+/*
+ * Copyright (c) 2019 Manivannan Sadhasivam
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <drivers/gpio.h>
 #include <spi.h>
+#include <misc/util.h>
+#include <net/lora.h>
+#include <zephyr.h>
+#include <sx1276/sx1276.h>
 
-#include <lorawan/sx1276.h>
+#define LOG_LEVEL CONFIG_LORA_LOG_LEVEL
+#include <logging/log.h>
+LOG_MODULE_REGISTER(sx1276);
 
-extern DioIrqHandler *DioIrq[];
+#define GPIO_DIO0_PIN		DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_PIN
+#define GPIO_DIO0_CONTROLLER	DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_CONTROLLER
+#define GPIO_RESET_PIN		DT_INST_0_SEMTECH_SX1276_RESET_GPIOS_PIN
+#define GPIO_CS_PIN		DT_INST_0_SEMTECH_SX1276_CS_GPIOS_PIN
+#define CLOCK_FREQ		DT_INST_0_SEMTECH_SX1276_CLOCK_FREQUENCY
 
-static struct spi_cs_control spi_cs = {
-	.gpio_pin = 3,
-	.delay = 0,
-};
+#define SX1276_REG_VERSION			0x42
 
-static spi_config spi_config = {
-	.frequency = 16000000,
-	.operation = SPI_OP_MODE_MASTER | SPI_MODE_CPOL |
-		SPI_MODE_CPHA | SPI_WORD_SET(8) | SPI_LINES_SINGLE,
-	.slave = 1,
-	.cs = &spi_cs,
-};
+struct sx1276_data {
+	struct device *dev;
+	struct device *spi;
+	struct spi_config spi_cfg;
+	struct device *dio0;
+	struct gpio_callback irq_cb;
+	struct k_sem data_sem;
+} dev_data;
 
-static char dio_gpio_dev_name_table[6] = {
-	CONFIG_SX1276_DIO0_DEV_NAME,
-	CONFIG_SX1276_DIO1_DEV_NAME,
-	CONFIG_SX1276_DIO2_DEV_NAME,
-	CONFIG_SX1276_DIO3_DEV_NAME,
-	CONFIG_SX1276_DIO4_DEV_NAME,
-	CONFIG_SX1276_DIO5_DEV_NAME,
-};
-
-static uint8_t dio_gpio_pin_table[6] = {
-	CONFIG_SX1276_DIO0_PIN,
-	CONFIG_SX1276_DIO1_PIN,
-	CONFIG_SX1276_DIO2_PIN,
-	CONFIG_SX1276_DIO3_PIN,
-	CONFIG_SX1276_DIO4_PIN,
-	CONFIG_SX1276_DIO5_PIN,
+bool SX1276CheckRfFrequency( uint32_t frequency )
+{
+    // Implement check. Currently all frequencies are supported
+    return true;
 }
 
-int bus_spi_init(void)
+static void sx1276_irq_callback(struct device *dev,
+				struct gpio_callback *cb, u32_t pins)
 {
-	spi_cs.gpio_dev = device_get_binding("GPIOA");
-	if ( NULL == spi_cs.gpio_dev )
-	{
-		SYS_LOG_ERR("Can not find device GPIOA");
-		return -1;
+}
+
+static int sx1276_transceive(struct device *dev, u8_t reg,
+			     bool write, void *data, size_t length)
+{
+	const struct spi_buf buf[2] = {
+		{
+			.buf = &reg,
+			.len = 1
+		},
+		{
+			.buf = data,
+			.len = length
+		}
+	};
+	struct spi_buf_set tx = {
+		.buffers = buf,
+		.count = 2,
+	};
+
+	if (!write) {
+		const struct spi_buf_set rx = {
+			.buffers = buf,
+			.count = 2
+		};
+
+		return spi_transceive(dev_data.spi, &dev_data.spi_cfg,
+				&tx, &rx);
 	}
 
-	spi_config.dev = device_get_binding("SPI_DEV");
-	if ( NULL == spi_config.dev )
-	{
-		SYS_LOG_ERR("Can not find device SPI_DEV");
-		return -1;
+	return spi_write(dev_data.spi, &dev_data.spi_cfg, &tx);
+}
+
+int sx1276_read(struct device *dev, u8_t reg_addr, u8_t *data, u8_t len)
+{
+	return sx1276_transceive(dev, reg_addr, false, data, len);
+}
+
+int sx1276_write(struct device *dev, u8_t reg_addr, u8_t byte)
+{
+	return sx1276_transceive(dev, reg_addr | BIT(7), true, &byte, 1);
+}
+
+void SX1276WriteBuffer(uint16_t addr, uint8_t *buffer, uint8_t size)
+{
+	struct device *dev = dev_data.dev;
+	int ret, i;
+
+	for (i = 0; i < size; i++) {
+		ret = sx1276_write(dev, addr, buffer[i]);
+		if (ret < 0) {
+			LOG_ERR("Unable to read address: %x", addr);
+			return;
+		}
 	}
+}
+
+void SX1276ReadBuffer(uint16_t addr, uint8_t *buffer, uint8_t size)
+{
+	struct device *dev = dev_data.dev;
+	int ret, i;
+	u8_t regval;
+
+	for (i = 0; i < size; i++) {
+		ret = sx1276_read(dev, addr, &regval, 1);
+		if (ret < 0) {
+			LOG_ERR("Unable to read address: %x", addr);
+			return;
+		}
+
+		buffer[i] = regval;
+	}
+}
+
+static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
+{
+	return 0;
+}
+
+static int sx1276_lora_recv(struct device *dev, u8_t *data)
+{
+	return 0;
+}
+
+static int sx1276_lora_config(struct device *dev,
+			      struct lora_modem_config *config)
+{
+	return 0;
+}
+
+static int sx1276_lora_init(struct device *dev)
+{
+	static struct spi_cs_control spi_cs;
+	struct device *reset_dev;
+	int ret;
+	u8_t regval;
+
+	dev_data.spi = device_get_binding(DT_INST_0_SEMTECH_SX1276_BUS_NAME);
+	if (!dev_data.spi) {
+		LOG_ERR("spi device not found: %s",
+			    DT_INST_0_SEMTECH_SX1276_BUS_NAME);
+		return -EINVAL;
+	}
+
+	dev_data.spi_cfg.operation = SPI_WORD_SET(8) | SPI_TRANSFER_MSB;
+	dev_data.spi_cfg.frequency = DT_INST_0_SEMTECH_SX1276_SPI_MAX_FREQUENCY;
+	dev_data.spi_cfg.slave = DT_INST_0_SEMTECH_SX1276_BASE_ADDRESS;
+
+	spi_cs.gpio_pin = GPIO_CS_PIN,
+	spi_cs.gpio_dev = device_get_binding(
+			DT_INST_0_SEMTECH_SX1276_CS_GPIOS_CONTROLLER);
+	if (!spi_cs.gpio_dev) {
+		LOG_ERR("Failed to initialize CS GPIO driver: %s",
+		       DT_INST_0_SEMTECH_SX1276_CS_GPIOS_CONTROLLER);
+		return -EIO;
+	}
+
+	dev_data.spi_cfg.cs = &spi_cs;
+
+	/* Setup DIO gpio */
+	dev_data.dio0 = device_get_binding(GPIO_DIO0_CONTROLLER);
+	if (dev_data.dio0 == NULL) {
+		LOG_ERR("Cannot get pointer to %s device",
+			GPIO_DIO0_CONTROLLER);
+		return -EINVAL;
+	}
+
+	gpio_pin_configure(dev_data.dio0, GPIO_DIO0_PIN,
+			   GPIO_DIR_IN | GPIO_INT | GPIO_INT_EDGE |
+			   GPIO_INT_DEBOUNCE | GPIO_INT_ACTIVE_HIGH);
+
+	gpio_init_callback(&dev_data.irq_cb,
+			   sx1276_irq_callback,
+			   BIT(GPIO_DIO0_PIN));
+
+	if (gpio_add_callback(dev_data.dio0, &dev_data.irq_cb) < 0) {
+		LOG_ERR("Could not set gpio callback.");
+		return -EIO;
+	}
+	gpio_pin_enable_callback(dev_data.dio0, GPIO_DIO0_PIN);
+
+	/* Setup Reset gpio */
+	reset_dev = device_get_binding(
+			DT_INST_0_SEMTECH_SX1276_RESET_GPIOS_CONTROLLER);
+	if (!reset_dev) {
+		LOG_ERR("Failed to initialize Reset GPIO driver: %s",
+		       DT_INST_0_SEMTECH_SX1276_RESET_GPIOS_CONTROLLER);
+		return -EIO;
+	}
+
+	ret = gpio_pin_configure(reset_dev, GPIO_RESET_PIN, GPIO_DIR_OUT);
+
+	/* Perform soft reset */
+	gpio_pin_write(reset_dev, GPIO_RESET_PIN, 0);
+	k_sleep(100);
+	gpio_pin_write(reset_dev, GPIO_RESET_PIN, 1);
+	k_sleep(100);
+
+	ret = sx1276_read(dev, SX1276_REG_VERSION, &regval, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read version info");
+		return -EIO;
+	}
+
+	k_sem_init(&dev_data.data_sem, 0, UINT_MAX);
+	dev_data.dev = dev;
+
+	LOG_INF("SX1276 Version:%02x found", regval);
 
 	return 0;
 }
 
-void sx1276_io_irq_handler(struct device *dev, struct gpio_callback *gpio_cb, uint32_t pins)
-{
-	uint32_t pin = 0;
+/* Initialize Radio driver callbacks */
+const struct Radio_s Radio = {
+	.Init = SX1276Init,
+	.GetStatus = SX1276GetStatus,
+	.SetModem = SX1276SetModem,
+	.SetChannel = SX1276SetChannel,
+	.IsChannelFree = SX1276IsChannelFree,
+	.Random = SX1276Random,
+	.SetRxConfig = SX1276SetRxConfig,
+	.SetTxConfig = SX1276SetTxConfig,
+	.CheckRfFrequency = SX1276CheckRfFrequency,
+	.TimeOnAir = SX1276GetTimeOnAir,
+	.Send = SX1276Send,
+	.Sleep = SX1276SetSleep,
+	.Standby = SX1276SetStby,
+	.Rx = SX1276SetRx,
+	.StartCad = SX1276StartCad,
+	.SetTxContinuousWave = SX1276SetTxContinuousWave,
+	.Rssi = SX1276ReadRssi,
+	.Write = SX1276Write,
+	.Read = SX1276Read,
+	.WriteBuffer = SX1276WriteBuffer,
+	.ReadBuffer = SX1276ReadBuffer,
+	.SetMaxPayloadLength = SX1276SetMaxPayloadLength,
+	.SetPublicNetwork = SX1276SetPublicNetwork,
+	.GetWakeupTime = SX1276GetWakeupTime,
+	.IrqProcess = NULL,
+	.RxBoosted = NULL,
+	.SetRxDutyCycle = NULL,
+};
 
-	while ( 1 != pins )
-	{
-		pins >>= 1;
-		pin++;
-	}
+static const struct lora_driver_api sx1276_lora_api = {
+	.config = sx1276_lora_config,
+	.send = sx1276_lora_send,
+	.recv = sx1276_lora_recv,
+};
 
-	for ( i = 0; i < 6; ++i )
-	{
-		if ( dio_gpio_pin_table[i] == pin )
-		{
-			dev_temp = device_get_binding(dio_gpio_dev_name_table[i]);
-			if ( dev == dev_temp )
-			{
-				(*DioIrq[i])();
-				break;
-			}
-		}
-	}
-}
-
-void SX1276IoIrqInit( DioIrqHandler **irqHandlers )
-{
-	static struct gpio_callback gpio_cb[6];
-	static int gpio_cb_number = 0;
-
-	bool gpio_initialized_table[6] = {
-		false, false, false, false, false, false,
-	};
-
-	struct device *dev = NULL;
-
-	int i, j, pin_mask;
-
-	for ( i = 0, gpio_cb_number = 0; i < 6; ++i )
-	{
-		if ( gpio_initialized_table[i] )
-		{
-			/* Already initialized, skip to next pin */
-			continue;
-		}
-
-		dev = device_get_binding(gpio_dev_name_table[i]);
-		pin_mask = 0;
-
-		/* Get the same gpio device pins into pin_mask */
-		for ( j = i; j < 6; ++j )
-		{
-			if ( 0 == strcmp(dio_gpio_dev_name_table[i], dio_gpio_dev_name_table[j]) )
-			{
-				gpio_pin_configure(dev, dio_gpio_pin_table[j],
-						GPIO_DIR_IN | GPIO_INT | GPIO_INT_DEBOUNCE |	\
-						GPIO_PUD_PULL_DOWN | GPIO_INT_EDGE | GPIO_INT_ACTIVE_HIGH);
-				pin_mask |= BIT(dio_gpio_pin_table[j]);
-
-				/* Skip current pin on initialization */
-				gpio_initialized_table[j] = true;
-			}
-		}
-
-		/* Initial callback */
-		gpio_init_callback(&gpio_cb[gpio_cb_number], sx1276_io_irq_handler, pin_mask);
-
-		/* Add one particular callback structure */
-		gpio_add_callback(dev, &gpio_cb[gpio_cb_number]);
-
-		gpio_cb_number++;
-	}
-}
-
-void SX1276Reset( void )
-{
-	struct device *dev = device_get_binding(CONFIG_SX1276_RESET_DEV_NAME);
-	if ( NULL == dev )
-	{
-		return ;
-	}
-
-	gpio_pin_configure(dev, CONFIG_SX1276_RESET_PIN, GPIO_DIR_OUT | GPIO_PUD_NORMAL);
-	gpio_pin_write(dev, CONFIG_SX1276_RESET_PIN, 0);
-
-	k_sleep( 1 );
-
-	gpio_pin_configure(dev, CONFIG_SX1276_RESET_PIN, GPIO_DIR_IN | GPIO_PUD_NORMAL);
-	k_sleep( 6 );
-}
-
-void SX1276WriteBuffer( uint8_t addr, uint8_t *buffer, uint8_t size )
-{
-	addr |= 0x80;
-
-	struct spi_buf tx_bufs[] = {
-		{
-			.buf = &addr,
-			.len = 1,
-		},
-		{
-			.buf = buffer,
-			.len = size,
-		},
-	};
-
-	spi_write(spi_config, tx_bufs, ARRAY_SIZE(tx_bufs));
-}
-
-void SX1276ReadBuffer( uint8_t addr, uint8_t *buffer, uint8_t size )
-{
-	addr &= 0x7F;
-
-	struct spi_buf tx_bufs[] = {
-		{
-			.buf = &addr,
-			.len = 1,
-		},
-	};
-
-	spi_write(spi_config, tx_bufs, ARRAY_SIZE(tx_bufs));
-
-	struct spi_buf rx_bufs[] = {
-		{
-			.buf = buffer,
-			.len = size,
-		},
-	};
-
-	spi_read(spi_config, rx_bufs, ARRAY_SIZE(rx_bufs));
-}
+DEVICE_AND_API_INIT(sx1276_lora, DT_INST_0_SEMTECH_SX1276_LABEL,
+		    &sx1276_lora_init, NULL,
+		    NULL, POST_KERNEL, CONFIG_LORA_INIT_PRIORITY,
+		    &sx1276_lora_api);

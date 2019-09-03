@@ -8,6 +8,8 @@
 
 menuconfig LORA
 	bool "LoRa drivers"
+	select HAS_SEMTECH_LORAMAC
+	select HAS_SEMTECH_RADIO_DRIVERS
 	help
 	  Include LoRa drivers in the system configuration.
 

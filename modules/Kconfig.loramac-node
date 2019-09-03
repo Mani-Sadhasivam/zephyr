@@ -1,0 +1,22 @@
+#
+# Copyright (c) 2019 Manivannan Sadhasivam
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+config HAS_SEMTECH_LORAMAC
+	bool "LoRaMAC Support"
+	select NEWLIB_LIBC
+	help
+	  This option enables the LoRaMAC library
+
+config HAS_SEMTECH_RADIO_DRIVERS
+	bool
+	help
+	  This option enables the use of Semtech's Radio drivers
+
+if HAS_SEMTECH_RADIO_DRIVERS
+
+config HAS_SEMTECH_SX1276
+	bool
+endif
