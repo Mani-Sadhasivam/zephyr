@@ -59,6 +59,10 @@
 	};
 };
 
+&rtc {
+	status = "okay";
+};
+
 &spi1 {
 	status = "okay";
 	cs-gpios = <&gpiob 0 0>;
