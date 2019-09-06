@@ -23,7 +23,30 @@ LOG_MODULE_REGISTER(sx1276);
 #define GPIO_CS_PIN		DT_INST_0_SEMTECH_SX1276_CS_GPIOS_PIN
 #define CLOCK_FREQ		DT_INST_0_SEMTECH_SX1276_CLOCK_FREQUENCY
 
+#define SX1276_PA_CONFIG_PA_BOOST		BIT(7)
+
+#define SX1276_REG_PA_CONFIG			0x09
+#define SX1276_REG_PA_DAC			0x4d
 #define SX1276_REG_VERSION			0x42
+
+#define SX1276_PA_RFO				0
+#define SX1276_PA_BOOST				1
+
+struct _sx1276_power {
+	u8_t min;
+	u8_t max;
+};
+
+static struct _sx1276_power sx1276_power[2] = {
+	[SX1276_PA_RFO] = {
+		.min = 0,
+		.max = 14,
+	},
+	[SX1276_PA_BOOST] = {
+		.min = 2,
+		.max = 20,
+	},
+};
 
 extern DioIrqHandler *DioIrq[];
 
@@ -122,6 +145,26 @@ uint32_t RtcSetTimerContext(void)
 
 	config.init_val = 0;
 	rtc_set_config(dev_data.rtc, &config);
+
+	return 0;
+}
+
+// sub-second number of bits
+#define N_PREDIV_S                                  10
+#define USEC_NUMBER                                 1000000
+#define MSEC_NUMBER                                 ( USEC_NUMBER / 1000 )
+#define COMMON_FACTOR                               3
+#define CONV_NUMER                                  ( MSEC_NUMBER >> COMMON_FACTOR )
+#define CONV_DENOM                                  ( 1 << ( N_PREDIV_S - COMMON_FACTOR ))
+
+uint32_t RtcMs2Tick( uint32_t milliseconds )
+{
+    return ( uint32_t )( ( ( ( uint64_t )milliseconds ) * CONV_DENOM ) / CONV_NUMER );
+}
+
+void DelayMsMcu(uint32_t ms)
+{
+	k_sleep(ms);
 }
 
 static void sx1276_irq_callback(struct device *dev,
@@ -236,8 +279,62 @@ void SX1276ReadBuffer(uint16_t addr, uint8_t *buffer, uint8_t size)
 	}
 }
 
+void SX1276SetRfTxPower(int8_t tx_power)
+{
+	int ret;
+	u8_t pa_config;
+
+	/* Set output power */
+	ret = sx1276_read(SX1276_REG_PA_CONFIG, &pa_config, 1);
+	if (ret < 0) {
+		LOG_ERR("Unable to read version PA config");
+		return;
+	}
+
+	pa_config &= ~GENMASK(3, 0);
+#if defined CONFIG_PA_RFO_PIN
+	pa_config &= ~SX1276_PA_CONFIG_PA_BOOST;
+	if (tx_power < sx1276_power[SX1276_PA_RFO].min)
+		tx_power = sx1276_power[SX1276_PA_RFO].min;
+	if (tx_power > sx1276_power[SX1276_PA_RFO].max)
+		tx_power = sx1276_power[SX1276_PA_RFO].max;
+#else
+	pa_config |= SX1276_PA_CONFIG_PA_BOOST;
+	if (tx_power > sx1276_power[SX1276_PA_BOOST].max - 3) {
+		if (tx_power > sx1276_power[SX1276_PA_BOOST].max)
+			tx_power = sx1276_power[SX1276_PA_BOOST].max;
+
+		tx_power -= 3;
+		ret = sx1276_write(SX1276_REG_PA_DAC, 0x87);
+		if (ret < 0) {
+			LOG_ERR("Unable to write PADAC");
+			return;
+		}
+	} else {
+		if (tx_power < sx1276_power[SX1276_PA_BOOST].min)
+			tx_power = sx1276_power[SX1276_PA_BOOST].min;
+
+		ret = sx1276_write(SX1276_REG_PA_DAC, 0x84);
+		if (ret < 0) {
+			LOG_ERR("Unable to write PADAC");
+			return;
+		}
+	}
+#endif
+	pa_config |= (tx_power & 0x0F);
+	ret = sx1276_write(SX1276_REG_PA_CONFIG, pa_config);
+	if (ret < 0) {
+		LOG_ERR("Unable to write PA config");
+		return;
+	}
+}
+
 static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 {
+	Radio.SetMaxPayloadLength(MODEM_LORA, data_len);
+
+	Radio.Send(data, data_len);
+
 	return 0;
 }
 
@@ -250,14 +347,11 @@ static int sx1276_lora_config(struct device *dev,
 			      struct lora_modem_config *config)
 {
 
-/*
-	data->sx1276_config.lorap2p_param.Frequency = config->frequency;
-	data->sx1276_config.lorap2p_param.Spreadfact = config->spreading_factor;
-	data->sx1276_config.lorap2p_param.Bandwidth = config->bandwidth;
-	data->sx1276_config.lorap2p_param.Codingrate = config->coding_rate;
-	data->sx1276_config.lorap2p_param.Preamlen = config->preamble_len;
-	data->sx1276_config.lorap2p_param.Powerdbm = config->power;
-*/
+	Radio.SetChannel(config->frequency);
+	Radio.SetTxConfig(MODEM_LORA, config->tx_power, 0,
+			  config->bandwidth, config->spreading_factor,
+			  config->coding_rate, config->preamble_len,
+			  false, true, 0, 0, false, 3e3 );
 	return 0;
 }
 
