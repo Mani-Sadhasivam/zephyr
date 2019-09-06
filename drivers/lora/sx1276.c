@@ -15,19 +15,34 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(sx1276);
 
-#define GPIO_DIO0_PIN		DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_PIN
-#define GPIO_DIO0_CONTROLLER	DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_CONTROLLER
+#define SX1276_MAX_DIO		5
+
 #define GPIO_RESET_PIN		DT_INST_0_SEMTECH_SX1276_RESET_GPIOS_PIN
 #define GPIO_CS_PIN		DT_INST_0_SEMTECH_SX1276_CS_GPIOS_PIN
 #define CLOCK_FREQ		DT_INST_0_SEMTECH_SX1276_CLOCK_FREQUENCY
 
 #define SX1276_REG_VERSION			0x42
 
+int sx1276_dio_pins[SX1276_MAX_DIO] = {
+	DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_PIN_0,
+	DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_PIN_1,
+	DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_PIN_2,
+	DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_PIN_3,
+	DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_PIN_4,
+};
+
+static char sx1276_dio_ports[SX1276_MAX_DIO][6] = {
+	DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_CONTROLLER_0,
+	DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_CONTROLLER_1,
+	DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_CONTROLLER_2,
+	DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_CONTROLLER_3,
+	DT_INST_0_SEMTECH_SX1276_DIO_GPIOS_CONTROLLER_4,
+};
+
 struct sx1276_data {
-	struct device *dev;
 	struct device *spi;
 	struct spi_config spi_cfg;
-	struct device *dio0;
+	struct device *dio_dev[SX1276_MAX_DIO];
 	struct gpio_callback irq_cb;
 	struct k_sem data_sem;
 } dev_data;
@@ -43,8 +58,7 @@ static void sx1276_irq_callback(struct device *dev,
 {
 }
 
-static int sx1276_transceive(struct device *dev, u8_t reg,
-			     bool write, void *data, size_t length)
+static int sx1276_transceive(u8_t reg, bool write, void *data, size_t length)
 {
 	const struct spi_buf buf[2] = {
 		{
@@ -74,23 +88,22 @@ static int sx1276_transceive(struct device *dev, u8_t reg,
 	return spi_write(dev_data.spi, &dev_data.spi_cfg, &tx);
 }
 
-int sx1276_read(struct device *dev, u8_t reg_addr, u8_t *data, u8_t len)
+int sx1276_read(u8_t reg_addr, u8_t *data, u8_t len)
 {
-	return sx1276_transceive(dev, reg_addr, false, data, len);
+	return sx1276_transceive(reg_addr, false, data, len);
 }
 
-int sx1276_write(struct device *dev, u8_t reg_addr, u8_t byte)
+int sx1276_write(u8_t reg_addr, u8_t byte)
 {
-	return sx1276_transceive(dev, reg_addr | BIT(7), true, &byte, 1);
+	return sx1276_transceive(reg_addr | BIT(7), true, &byte, 1);
 }
 
 void SX1276WriteBuffer(uint16_t addr, uint8_t *buffer, uint8_t size)
 {
-	struct device *dev = dev_data.dev;
 	int ret, i;
 
 	for (i = 0; i < size; i++) {
-		ret = sx1276_write(dev, addr, buffer[i]);
+		ret = sx1276_write(addr, buffer[i]);
 		if (ret < 0) {
 			LOG_ERR("Unable to read address: %x", addr);
 			return;
@@ -100,12 +113,11 @@ void SX1276WriteBuffer(uint16_t addr, uint8_t *buffer, uint8_t size)
 
 void SX1276ReadBuffer(uint16_t addr, uint8_t *buffer, uint8_t size)
 {
-	struct device *dev = dev_data.dev;
 	int ret, i;
 	u8_t regval;
 
 	for (i = 0; i < size; i++) {
-		ret = sx1276_read(dev, addr, &regval, 1);
+		ret = sx1276_read(addr, &regval, 1);
 		if (ret < 0) {
 			LOG_ERR("Unable to read address: %x", addr);
 			return;
@@ -136,6 +148,7 @@ static int sx1276_lora_init(struct device *dev)
 	static struct spi_cs_control spi_cs;
 	struct device *reset_dev;
 	int ret;
+	unsigned int i;
 	u8_t regval;
 
 	dev_data.spi = device_get_binding(DT_INST_0_SEMTECH_SX1276_BUS_NAME);
@@ -160,27 +173,29 @@ static int sx1276_lora_init(struct device *dev)
 
 	dev_data.spi_cfg.cs = &spi_cs;
 
-	/* Setup DIO gpio */
-	dev_data.dio0 = device_get_binding(GPIO_DIO0_CONTROLLER);
-	if (dev_data.dio0 == NULL) {
-		LOG_ERR("Cannot get pointer to %s device",
-			GPIO_DIO0_CONTROLLER);
-		return -EINVAL;
+	/* Setup DIO gpios */
+	for (i = 0; i < SX1276_MAX_DIO; i++) {
+		dev_data.dio_dev[i] = device_get_binding(sx1276_dio_ports[i]);
+		if (dev_data.dio_dev[i] == NULL) {
+			LOG_ERR("Cannot get pointer to %s device",
+				sx1276_dio_ports[i]);
+			return -EINVAL;
+		}
+
+		gpio_pin_configure(dev_data.dio_dev[i], sx1276_dio_pins[i],
+				   GPIO_DIR_IN | GPIO_INT | GPIO_INT_EDGE |
+				   GPIO_INT_DEBOUNCE | GPIO_INT_ACTIVE_HIGH);
+
+		gpio_init_callback(&dev_data.irq_cb,
+				   sx1276_irq_callback,
+				   BIT(sx1276_dio_pins[i]));
+
+		if (gpio_add_callback(dev_data.dio_dev[i], &dev_data.irq_cb) < 0) {
+			LOG_ERR("Could not set gpio callback.");
+			return -EIO;
+		}
+		gpio_pin_enable_callback(dev_data.dio_dev[i], sx1276_dio_pins[i]);
 	}
-
-	gpio_pin_configure(dev_data.dio0, GPIO_DIO0_PIN,
-			   GPIO_DIR_IN | GPIO_INT | GPIO_INT_EDGE |
-			   GPIO_INT_DEBOUNCE | GPIO_INT_ACTIVE_HIGH);
-
-	gpio_init_callback(&dev_data.irq_cb,
-			   sx1276_irq_callback,
-			   BIT(GPIO_DIO0_PIN));
-
-	if (gpio_add_callback(dev_data.dio0, &dev_data.irq_cb) < 0) {
-		LOG_ERR("Could not set gpio callback.");
-		return -EIO;
-	}
-	gpio_pin_enable_callback(dev_data.dio0, GPIO_DIO0_PIN);
 
 	/* Setup Reset gpio */
 	reset_dev = device_get_binding(
@@ -199,14 +214,13 @@ static int sx1276_lora_init(struct device *dev)
 	gpio_pin_write(reset_dev, GPIO_RESET_PIN, 1);
 	k_sleep(100);
 
-	ret = sx1276_read(dev, SX1276_REG_VERSION, &regval, 1);
+	ret = sx1276_read(SX1276_REG_VERSION, &regval, 1);
 	if (ret < 0) {
 		LOG_ERR("Unable to read version info");
 		return -EIO;
 	}
 
 	k_sem_init(&dev_data.data_sem, 0, UINT_MAX);
-	dev_data.dev = dev;
 
 	LOG_INF("SX1276 Version:%02x found", regval);
 
