@@ -26,7 +26,7 @@ void main(void)
 
 	lora_dev = device_get_binding(DT_INST_0_SEMTECH_SX1276_LABEL);
 	if (!lora_dev) {
-		LOG_ERR("%s Device not found", DT_INST_0_SEMTECH_SX1276_LABEL);
+		printk("%s Device not found", DT_INST_0_SEMTECH_SX1276_LABEL);
 		return;
 	}
 
@@ -39,13 +39,18 @@ void main(void)
 
 	ret = lora_config(lora_dev, &config);
 	if (ret < 0) {
-		LOG_ERR("LoRa config failed");
+		printk("LoRa config failed");
 		return;
 	}
 
-	ret = lora_send(lora_dev, data, MAX_DATA_LEN);
-	if (ret < 0) {
-		LOG_ERR("LoRa send failed");
-		return;
+	while (1) {
+		printk("Sending data\n");
+		ret = lora_send(lora_dev, data, MAX_DATA_LEN);
+		if (ret < 0) {
+			printk("LoRa send failed");
+			return;
+		}
+
+		k_sleep(3000);
 	}
 }

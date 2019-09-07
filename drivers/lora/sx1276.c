@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <drivers/counter.h>
 #include <drivers/gpio.h>
 #include <spi.h>
 #include <misc/util.h>
 #include <net/lora.h>
-#include <rtc.h>
 #include <zephyr.h>
 #include <sx1276/sx1276.h>
 #include <arch/arm/cortex_m/cmsis.h>
@@ -67,9 +67,9 @@ static char sx1276_dio_ports[SX1276_MAX_DIO][6] = {
 };
 
 struct sx1276_data {
-	struct device *spi;
-	struct device *rtc;
+	struct device *counter;
 	struct device *reset;
+	struct device *spi;
 	struct spi_config spi_cfg;
 	struct device *dio_dev[SX1276_MAX_DIO];
 	struct gpio_callback irq_cb;
@@ -84,7 +84,7 @@ bool SX1276CheckRfFrequency(uint32_t frequency)
 
 void RtcStopAlarm(void)
 {
-	rtc_disable(dev_data.rtc);
+	counter_stop(dev_data.counter);
 }
 
 void SX1276SetAntSwLowPower( bool status )
@@ -126,7 +126,7 @@ void BoardCriticalSectionEnd( uint32_t *mask )
 
 uint32_t RtcGetTimerElapsedTime(void)
 {
-	return rtc_read(dev_data.rtc);
+	return counter_read(dev_data.counter);
 }
 
 u32_t RtcGetMinimumTimeout(void)
@@ -136,16 +136,16 @@ u32_t RtcGetMinimumTimeout(void)
 
 void RtcSetAlarm(uint32_t timeout)
 {
-	rtc_set_alarm(dev_data.rtc, timeout);
+	struct counter_alarm_cfg alarm_cfg;
+
+	alarm_cfg.flags = 0;
+	alarm_cfg.ticks = counter_us_to_ticks(dev_data.counter, timeout);
+
+	counter_set_channel_alarm(dev_data.counter, 0, &alarm_cfg);
 }
 
 uint32_t RtcSetTimerContext(void)
 {
-	struct rtc_config config;
-
-	config.init_val = 0;
-	rtc_set_config(dev_data.rtc, &config);
-
 	return 0;
 }
 
@@ -159,7 +159,7 @@ uint32_t RtcSetTimerContext(void)
 
 uint32_t RtcMs2Tick( uint32_t milliseconds )
 {
-    return ( uint32_t )( ( ( ( uint64_t )milliseconds ) * CONV_DENOM ) / CONV_NUMER );
+	return counter_us_to_ticks(dev_data.counter, (milliseconds / 1000));
 }
 
 void DelayMsMcu(uint32_t ms)
@@ -331,6 +331,7 @@ void SX1276SetRfTxPower(int8_t tx_power)
 
 static int sx1276_lora_send(struct device *dev, u8_t *data, u32_t data_len)
 {
+	printk("%s: %d\n", __func__, __LINE__);
 	Radio.SetMaxPayloadLength(MODEM_LORA, data_len);
 
 	Radio.Send(data, data_len);
@@ -347,11 +348,14 @@ static int sx1276_lora_config(struct device *dev,
 			      struct lora_modem_config *config)
 {
 
+	printk("%s: %d\n", __func__, __LINE__);
 	Radio.SetChannel(config->frequency);
+	printk("%s: %d\n", __func__, __LINE__);
 	Radio.SetTxConfig(MODEM_LORA, config->tx_power, 0,
 			  config->bandwidth, config->spreading_factor,
 			  config->coding_rate, config->preamble_len,
 			  false, true, 0, 0, false, 3e3 );
+	printk("%s: %d\n", __func__, __LINE__);
 	return 0;
 }
 
@@ -423,6 +427,7 @@ static int sx1276_lora_init(struct device *dev)
 		return -EIO;
 	}
 
+	printk("%s: %d\n", __func__, __LINE__);
 	ret = gpio_pin_configure(dev_data.reset, GPIO_RESET_PIN, GPIO_DIR_OUT);
 
 	/* Perform soft reset */
@@ -437,8 +442,9 @@ static int sx1276_lora_init(struct device *dev)
 		return -EIO;
 	}
 
-	dev_data.rtc = device_get_binding(CONFIG_RTC_0_NAME);
-	if (!dev_data.rtc) {
+	printk("%s: %d\n", __func__, __LINE__);
+	dev_data.counter = device_get_binding(CONFIG_RTC_0_NAME);
+	if (!dev_data.counter) {
 		LOG_ERR("Cannot get pointer to %s device",
 			CONFIG_RTC_0_NAME);
 		return -EIO;

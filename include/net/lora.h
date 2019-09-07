@@ -16,14 +16,14 @@
 #include <device.h>
 
 enum lora_signal_bandwidth {
-	BW_7_8_KHZ,
-	BW_10_4_KHZ,
-	BW_15_6_KHZ,
-	BW_20_8_KHZ,
-	BW_31_25_KHZ,
-	BW_41_7_KHZ,
-	BW_62_5_KHZ,
-	BW_125_KHZ,
+//	BW_7_8_KHZ,
+//	BW_10_4_KHZ,
+//	BW_15_6_KHZ,
+//	BW_20_8_KHZ,
+//	BW_31_25_KHZ,
+//	BW_41_7_KHZ,
+//	BW_62_5_KHZ,
+	BW_125_KHZ = 0,
 	BW_250_KHZ,
 	BW_500_KHZ,
 };
