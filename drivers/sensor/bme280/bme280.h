@@ -20,6 +20,21 @@
 #define BME280_REG_CTRL_MEAS            0xF4
 #define BME280_REG_CTRL_HUM             0xF2
 
+/* BMP180 specific registers */
+#define BMP180_REG_OUT_XLSB		0xF8
+#define BMP180_REG_OUT_LSB		0xF7
+#define BMP180_REG_OUT_MSB		0xF6
+#define BMP180_REG_CALIB_START		0xAA
+#define BMP180_REG_CALIB_COUNT		22
+#define BMP180_MEAS_SCO			BIT(5)
+#define BMP180_MEAS_TEMP		(0x0E | BMP180_MEAS_SCO)
+#define BMP180_MEAS_PRESS_X(oss)	((oss) << 6 | 0x14 | BMP180_MEAS_SCO)
+#define BMP180_MEAS_PRESS_1X		BMP180_MEAS_PRESS_X(0)
+#define BMP180_MEAS_PRESS_2X		BMP180_MEAS_PRESS_X(1)
+#define BMP180_MEAS_PRESS_4X		BMP180_MEAS_PRESS_X(2)
+#define BMP180_MEAS_PRESS_8X		BMP180_MEAS_PRESS_X(3)
+
+#define BMP180_CHIP_ID                  0x55
 #define BMP280_CHIP_ID_SAMPLE_1         0x56
 #define BMP280_CHIP_ID_SAMPLE_2         0x57
 #define BMP280_CHIP_ID_MP               0x58
@@ -100,6 +115,21 @@
 					 BME280_FILTER |  \
 					 BME280_SPI_3W_DISABLE)
 
+enum { AC1, AC2, AC3, AC4, AC5, AC6, B1, B2, MB, MC, MD };
+struct bmp180_calib {
+	s16_t AC1;
+	s16_t AC2;
+	s16_t AC3;
+	u16_t AC4;
+	u16_t AC5;
+	u16_t AC6;
+	s16_t B1;
+	s16_t B2;
+	s16_t MB;
+	s16_t MC;
+	s16_t MD;
+};
+
 struct bme280_data {
 #ifdef DT_BOSCH_BME280_BUS_I2C
 	struct device *i2c_master;
@@ -129,6 +159,8 @@ struct bme280_data {
 	s16_t dig_h4;
 	s16_t dig_h5;
 	s8_t dig_h6;
+
+	struct bmp180_calib bmp180_data;
 
 	/* Compensated values. */
 	s32_t comp_temp;

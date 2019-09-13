@@ -101,6 +101,18 @@ static int bm280_reg_write(struct bme280_data *data, u8_t reg, u8_t val)
  * Compensation code taken from BME280 datasheet, Section 4.2.3
  * "Compensation formula".
  */
+
+static void bmp180_compensate_temp(struct bme280_data *data, s32_t adc_temp)
+{
+	s32_t var1, var2;
+
+	var1 = ((adc_temp - data->bmp180_data.AC6) * data->bmp180_data.AC5) >> 15;
+	var2 = (data->bmp180_data.MC << 11) / (var1 + data->bmp180_data.MD);
+
+	data->t_fine = var1 + var2;
+	data->comp_temp = ((data->t_fine + 8) >> 4) * 10;
+}
+
 static void bme280_compensate_temp(struct bme280_data *data, s32_t adc_temp)
 {
 	s32_t var1, var2;
@@ -165,21 +177,51 @@ static int bme280_sample_fetch(struct device *dev, enum sensor_channel chan)
 	struct bme280_data *data = dev->driver_data;
 	u8_t buf[8];
 	s32_t adc_press, adc_temp, adc_humidity;
+	u16_t tmp = 0;
 	int size = 6;
 	int ret;
+
+	if (data->chip_id == BMP180_CHIP_ID) {
+		ret = bm280_reg_write(data, BME280_REG_CTRL_MEAS, BMP180_MEAS_TEMP);
+		if (ret < 0) {
+			return ret;
+		}
+		k_sleep(400);
+	}
 
 	__ASSERT_NO_MSG(chan == SENSOR_CHAN_ALL);
 
 	if (data->chip_id == BME280_CHIP_ID) {
 		size = 8;
 	}
-	ret = bm280_reg_read(data, BME280_REG_PRESS_MSB, buf, size);
-	if (ret < 0) {
-		return ret;
+
+	if (data->chip_id == BMP180_CHIP_ID) {
+		size = 2;
+
+		ret = bm280_reg_read(data, BMP180_REG_OUT_MSB, (u8_t *)&tmp, size);
+		if (ret < 0) {
+			return ret;
+		}
+
+	} else {
+		ret = bm280_reg_read(data, BME280_REG_PRESS_MSB, buf, size);
+		if (ret < 0) {
+			return ret;
+		}
 	}
 
 	adc_press = (buf[0] << 12) | (buf[1] << 4) | (buf[2] >> 4);
-	adc_temp = (buf[3] << 12) | (buf[4] << 4) | (buf[5] >> 4);
+
+	if (data->chip_id == BMP180_CHIP_ID) {
+		adc_temp = sys_be16_to_cpu(tmp);
+	} else {
+		adc_temp = (buf[3] << 12) | (buf[4] << 4) | (buf[5] >> 4);
+	}
+
+	if (data->chip_id == BMP180_CHIP_ID) {
+		bmp180_compensate_temp(data, adc_temp);
+		return 0;
+	}
 
 	bme280_compensate_temp(data, adc_temp);
 	bme280_compensate_press(data, adc_press);
@@ -237,6 +279,33 @@ static const struct sensor_driver_api bme280_api_funcs = {
 	.sample_fetch = bme280_sample_fetch,
 	.channel_get = bme280_channel_get,
 };
+
+static int bmp180_read_compensation(struct bme280_data *data)
+{
+	u16_t buf[11];
+	int err = 0;
+
+	err = bm280_reg_read(data, BMP180_REG_CALIB_START,
+			     (u8_t *)buf, sizeof(buf));
+
+	if (err < 0) {
+		return err;
+	}
+
+	data->bmp180_data.AC1 = sys_be16_to_cpu(buf[AC1]);
+	data->bmp180_data.AC2 = sys_be16_to_cpu(buf[AC2]);
+	data->bmp180_data.AC3 = sys_be16_to_cpu(buf[AC3]);
+	data->bmp180_data.AC4 = sys_be16_to_cpu(buf[AC4]);
+	data->bmp180_data.AC5 = sys_be16_to_cpu(buf[AC5]);
+	data->bmp180_data.AC6 = sys_be16_to_cpu(buf[AC6]);
+	data->bmp180_data.B1 = sys_be16_to_cpu(buf[B1]);
+	data->bmp180_data.B2 = sys_be16_to_cpu(buf[B2]);
+	data->bmp180_data.MB = sys_be16_to_cpu(buf[MB]);
+	data->bmp180_data.MC = sys_be16_to_cpu(buf[MC]);
+	data->bmp180_data.MD = sys_be16_to_cpu(buf[MD]);
+
+	return 0;
+}
 
 static int bme280_read_compensation(struct bme280_data *data)
 {
@@ -302,14 +371,23 @@ static int bme280_chip_init(struct device *dev)
 	} else if (data->chip_id == BMP280_CHIP_ID_MP ||
 		   data->chip_id == BMP280_CHIP_ID_SAMPLE_1) {
 		LOG_DBG("BMP280 chip detected");
+	} else if (data->chip_id == BMP180_CHIP_ID) {
+		LOG_DBG("BMP180 chip detected");
 	} else {
 		LOG_DBG("bad chip id 0x%x", data->chip_id);
 		return -ENOTSUP;
 	}
 
-	err = bme280_read_compensation(data);
-	if (err < 0) {
-		return err;
+	if (data->chip_id == BMP180_CHIP_ID) {
+		err = bmp180_read_compensation(data);
+		if (err < 0) {
+			return err;
+		}
+	} else {
+		err = bme280_read_compensation(data);
+		if (err < 0) {
+			return err;
+		}
 	}
 
 	if (data->chip_id == BME280_CHIP_ID) {
