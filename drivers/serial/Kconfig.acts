@@ -1,0 +1,16 @@
+# Kconfig - Acts UART
+#
+#  * Copyright (c) 2019 Actions (Zhuhai) Technology Co., Ltd
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+menuconfig UART_ACTS
+	bool "acts uart driver"
+	default n
+	select SERIAL_HAS_DRIVER
+	select SERIAL_SUPPORT_INTERRUPT
+	depends on SOC_ACTIONS_ATB110X
+	help
+	  Enable the acts uart driver.
+

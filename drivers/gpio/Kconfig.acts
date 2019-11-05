@@ -1,0 +1,32 @@
+# Kconfig - GPIO driver configuration options
+
+#
+# Copyright (c) 2019 Actions (Zhuhai) Technology Co., Ltd
+# 
+# SPDX-License-Identifier: Apache-2.0
+#
+
+if SOC_ACTIONS_ATB110X
+
+menuconfig GPIO_ACTS
+	bool
+	prompt "Actions SoC GPIO controller support"
+	depends on GPIO
+	default y
+	help
+	 Enable support for the Actions SoC clock driver.
+
+config GPIO_ACTS_DRV_NAME
+	string
+	prompt "Actions SoC GPIO device name"
+	depends on GPIO_ACTS
+	default "gpio"
+
+config GPIO_ACTS_INIT_PRIORITY
+	int
+	default 20
+	prompt "Init priority"
+	help
+	  Device driver initialization priority.
+
+endif # SOC_ACTIONS_GL5601A

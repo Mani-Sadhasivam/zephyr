@@ -1,0 +1,9 @@
+zephyr_sources(
+  startup.S
+  soc.c
+  soc_reset.c
+  soc_pinmux.c
+  soc_pmu.c
+  soc_clock.c
+  soc_efuse.c
+  )

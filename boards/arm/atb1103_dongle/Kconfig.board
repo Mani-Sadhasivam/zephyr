@@ -1,0 +1,9 @@
+# Kconfig - Actions (Zhuhai) Technology ATB110XY
+#
+# Copyright (c) 2019 Actions (Zhuhai) Technology Co., Ltd
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config BOARD_ATB1103_DONGLE
+	bool "ATB1103 DONGLE"
+	depends on SOC_ACTIONS_ATB110X
