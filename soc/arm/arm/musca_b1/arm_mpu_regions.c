@@ -5,7 +5,7 @@
  */
 
 #include <soc.h>
-#include <arch/arm/cortex_m/mpu/arm_mpu.h>
+#include <arch/arm/aarch32/cortex_m/mpu/arm_mpu.h>
 
 static const struct arm_mpu_region mpu_regions[] = {
 	/* Region 0 */

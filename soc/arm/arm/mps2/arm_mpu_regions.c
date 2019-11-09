@@ -7,7 +7,7 @@
 #include <generated_dts_board.h>
 
 #include <soc.h>
-#include <arch/arm/cortex_m/mpu/arm_mpu.h>
+#include <arch/arm/aarch32/cortex_m/mpu/arm_mpu.h>
 
 #if defined(CONFIG_ARMV8_M_BASELINE) || \
     defined(CONFIG_ARMV8_M_MAINLINE)

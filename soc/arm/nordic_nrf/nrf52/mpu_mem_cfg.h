@@ -6,7 +6,7 @@
 #ifndef _NRF52X_MPU_MEM_CFG_H_
 #define _NRF52X_MPU_MEM_CFG_H_
 
-#include <arch/arm/cortex_m/mpu/arm_mpu.h>
+#include <arch/arm/aarch32/cortex_m/mpu/arm_mpu.h>
 
 /* Flash Region Definitions */
 #if CONFIG_FLASH_SIZE == 64

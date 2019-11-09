@@ -7,7 +7,7 @@
 #define _ARM_MPU_MEM_CFG_H_
 
 #include <soc.h>
-#include <arch/arm/cortex_m/mpu/arm_mpu.h>
+#include <arch/arm/aarch32/cortex_m/mpu/arm_mpu.h>
 
 /* Flash Region Definitions */
 #if CONFIG_FLASH_SIZE == 512
