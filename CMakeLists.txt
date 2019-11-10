@@ -58,7 +58,6 @@ set(LINKER_SCRIPT_TARGET       linker_script_target)
 
 
 define_property(GLOBAL PROPERTY PROPERTY_OUTPUT_FORMAT BRIEF_DOCS " " FULL_DOCS " ")
-set_property(   GLOBAL PROPERTY PROPERTY_OUTPUT_FORMAT elf32-little${ARCH}) # BFD format
 
 # "zephyr_interface" is a source-less library that encapsulates all the global
 # compiler options needed by all source files. All zephyr libraries,
