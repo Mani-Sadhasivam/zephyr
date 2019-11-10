@@ -1,0 +1,27 @@
+identifier: qemu_cortex_a53
+name: QEMU Emulation for Cortex-A53
+type: qemu
+simulation: qemu
+arch: arm
+toolchain:
+  - cross-compile
+ram: 128
+testing:
+  ignore_tags:
+    - cmsis_rtos_v1
+    - cmsis_rtos_v1_philosopher
+    - cmsis_rtos_v1_synchronization
+    - cmsis_rtos_v2
+    - cmsis_rtos_v2_philosopher
+    - cmsis_rtos_v2_synchronization
+    - console
+    - crypto
+    - drivers
+    - interrupt
+    - jwt
+    - logging
+    - net
+    - nfc
+    - nmi
+    - shell
+    - tracing
