@@ -1,0 +1,10 @@
+zephyr_include_directories(./include)
+zephyr_include_directories(./include/platform/imx8mm_m4)
+
+zephyr_sources(common/llist.c)
+zephyr_sources(virtio/virtqueue.c)
+zephyr_sources(rpmsg_lite/rpmsg_lite.c)
+zephyr_sources(rpmsg_lite/rpmsg_ns.c)
+zephyr_sources(rpmsg_lite/rpmsg_queue.c)
+zephyr_sources(rpmsg_lite/porting/environment/rpmsg_env_bm.c)
+zephyr_sources(rpmsg_lite/porting/platform/imx8mm_m4/rpmsg_platform.c)

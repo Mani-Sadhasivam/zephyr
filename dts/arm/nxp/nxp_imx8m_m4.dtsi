@@ -101,6 +101,14 @@
 			label = "UART_4";
 			status = "disabled";
 		};
+
+		mub: mu@30ab0000 {
+			compatible = "nxp,imx-mcux-mu";
+			reg = <0x30ab0000 0x10000>;
+			interrupts = <97 0>;
+			label = "MU_B";
+			status = "disabled";
+		};
 	};
 };
 

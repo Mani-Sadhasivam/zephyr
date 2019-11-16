@@ -40,6 +40,7 @@ zephyr_sources(devices/${MCUX_DEVICE}/fsl_i2c.c)
 zephyr_sources(devices/${MCUX_DEVICE}/fsl_sai.c)
 zephyr_sources(devices/${MCUX_DEVICE}/fsl_sai_sdma.c)
 zephyr_sources(devices/${MCUX_DEVICE}/fsl_sdma.c)
+zephyr_sources(devices/${MCUX_DEVICE}/fsl_mu.c)
 if (${MCUX_DEVICE} MATCHES "LPC")
   zephyr_sources(devices/${MCUX_DEVICE}/fsl_power.c)
   zephyr_sources(devices/${MCUX_DEVICE}/fsl_reset.c)
@@ -50,6 +51,11 @@ endif()
 add_subdirectory(boards)
 add_subdirectory(components)
 add_subdirectory(drivers)
+
+add_subdirectory_ifdef(
+  CONFIG_SOC_SERIES_IMX8_M4
+  middleware/multicore/rpmsg_lite/lib
+  )
 
 add_subdirectory_ifdef(
   CONFIG_USB
