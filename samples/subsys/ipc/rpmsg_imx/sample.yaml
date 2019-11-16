@@ -1,0 +1,9 @@
+sample:
+    description: This sample communicates with Cortex A7 using RPMSG
+    name: i.MX8 IPM sample
+tests:
+    sample.subsys.ipc.rpmsg_imx:
+        build_only: true
+        filter: CONFIG_SOC_FAMILY_IMX
+        platform_whitelist: mimx8mm6_evk 
+        tags: samples ipm
