@@ -25,4 +25,3 @@ testing:
     - nfc
     - nmi
     - shell
-    - tracing
