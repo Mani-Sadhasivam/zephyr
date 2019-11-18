@@ -20,7 +20,6 @@ testing:
     - drivers
     - interrupt
     - jwt
-    - logging
     - net
     - nfc
     - nmi
