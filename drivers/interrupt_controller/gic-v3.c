@@ -6,12 +6,15 @@
 
 #include <assert.h>
 #include <device.h>
+#include <sw_isr_table.h>
 #include <irq_nextlevel.h>
+#include <toolchain.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
-#include <drivers/interrupt_controller/itr_common.h>
 
 #define GIC_DIST_BASE		DT_INST_0_ARM_GIC_BASE_ADDRESS_0
-#define GIC_RDIST_BASE		DT_INST_0_ARM_GIC_BASE_ADDRESS_1
+
+/* HACK: Use dynamic affinity detection using MPIDR */
+#define GIC_RDIST_BASE		DT_INST_0_ARM_GIC_BASE_ADDRESS_1 + 0x40000
 
 #define GICR_SGIBASE_OFFSET	0x10000
 
@@ -88,6 +91,22 @@
 
 #define GIC_INIT_PRIORITY_DEFAULT 0
 
+#define ZEPHYR_NS_STATE		1
+
+#define read_sysreg(reg) ({					\
+	u64_t val;						\
+	__asm__ volatile("mrs %0, " STRINGIFY(reg) : "=r" (val));	\
+	val;							\
+})
+
+#define write_sysreg(val, reg) ({				\
+	__asm__ volatile("msr " STRINGIFY(reg) ", %0": : "r" (val));	\
+})
+
+struct gic_ictl_config {
+	u32_t isr_table_offset;
+};
+
 /*
  * wait for read write progress
  * TODO: add timed wait
@@ -131,8 +150,6 @@ void gic_intr_config(u32_t intid, uint32_t prio, uint32_t flags)
 	/* PRIORITYR registers provide byte access */
 	sys_write8(prio, IPRIORITYR(base, intid));
 	/* TODO: use flags to set more configurations */
-
-	printk("Config INTID %d\n", intid);
 }
 
 static void gic_intr_enable(struct device *dev, uint32_t intid)
@@ -140,6 +157,8 @@ static void gic_intr_enable(struct device *dev, uint32_t intid)
 	u32_t mask = BIT(intid & NUM_INTR_PER_REG);
 	u32_t idx = intid / 32;
 	mem_addr_t base;
+
+	gic_intr_config(intid, 0, 0);
 
 	base = (intid < GIC_SPI_BASE) ?
 	       (GIC_RDIST_BASE + GICR_SGIBASE_OFFSET)
@@ -165,7 +184,6 @@ static void gic_intr_disable(struct device *dev, uint32_t intid)
 	gic_wait_rwp(intid);
 }
 
-#ifndef ZEPHYR_NS_STATE
 /*
  * Wake up GIC redistributor.
  * clear ProcessorSleep and wait till ChildAsleep is cleared.
@@ -181,7 +199,6 @@ static void gic_rdist_enable(mem_addr_t rdist)
 	while (sys_read32(rdist + GICR_WAKER) & BIT(GIC_WAKER_CA))
 		;
 }
-#endif
 
 /* Initialize the cpu interface */
 static void gic_cpuif_init(void)
@@ -224,15 +241,23 @@ static void gic_dist_init(void)
 }
 
 /* first level interrupt handler */
-void gic_intr_handler(void)
+void gic_intr_handler(void *arg)
 {
+	struct device *dev = arg;
+	void (*gic_isr_handle)(void *);
+	const struct gic_ictl_config *cfg = dev->config->config_info;
 	int intid = read_sysreg(ICC_IAR1_EL1);
+	int isr_offset;
 
 	while (intid != GIC_INTID_PENDING_NONE) {
-		if (generic_handle_intr(intid) == INTR_UNHANDLED) {
-			printk("Unhandled interrupt %d\n", intid);
-			irq_disable(intid);
-		}
+		isr_offset = cfg->isr_table_offset + intid;
+
+		gic_isr_handle = _sw_isr_table[isr_offset].isr;
+		if (gic_isr_handle)
+			gic_isr_handle(_sw_isr_table[isr_offset].arg);
+		else
+			printk("gic: no handler found for int %d\n", intid);
+
 		/* eoi will move the state to inactive or active pending */
 		write_sysreg(intid, ICC_EOIR1_EL1);
 		/* check if more interrupts are pending */
@@ -251,20 +276,25 @@ static const struct irq_next_level_api gic_apis = {
 	.intr_set_priority = NULL,
 };
 
+static const struct gic_ictl_config gic_config = {
+	.isr_table_offset = CONFIG_2ND_LVL_ISR_TBL_OFFSET,
+};
+
 static int gic_init(struct device *unused);
-DEVICE_AND_API_INIT(arm_gicv3, DT_INST_0_ARM_GIC_LABEL, gic_init, NULL, NULL,
-		    PRE_KERNEL_1, GIC_INIT_PRIORITY_DEFAULT,
+DEVICE_AND_API_INIT(arm_gicv3, DT_INST_0_ARM_GIC_LABEL, gic_init, NULL,
+		    &gic_config, PRE_KERNEL_1, GIC_INIT_PRIORITY_DEFAULT,
 		    &gic_apis);
 
+#define GIC_PARENT_IRQ 0
+#define GIC_PARENT_IRQ_PRI 0
+#define GIC_PARENT_IRQ_FLAGS 0
 static int gic_init(struct device *unused)
 {
-	set_intr_handler(gic_intr_handler);
-	register_intctlr(DEVICE_GET(arm_gicv3));
+	IRQ_CONNECT(GIC_PARENT_IRQ, GIC_PARENT_IRQ_PRI, gic_intr_handler,
+		    DEVICE_GET(arm_gicv3), GIC_PARENT_IRQ_FLAGS);
 
 	gic_dist_init();
-#ifndef ZEPHYR_NS_STATE
 	gic_rdist_enable(GIC_RDIST_BASE);
-#endif
 	gic_cpuif_init();
 
 	return 0;
