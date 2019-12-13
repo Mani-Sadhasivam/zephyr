@@ -1,0 +1,71 @@
+/*
+ * Copyright (c) 2019 Manivannan Sadhasivam <mani@kernel.org>
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <mem.h>
+#include <arm/armv8-a.dtsi>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+/ {
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0>;
+		};
+	};
+
+	soc {
+		interrupt-parent = <&gic>;
+
+		gic: interrupt-controller@38800000 {
+			compatible = "arm,gic";
+			reg = <0x38800000 0x10000>,
+			      <0x38880000 0xc0000>;
+			interrupt-controller;
+			#interrupt-cells = <4>;
+			label = "GIC";
+			status = "okay";
+		};
+
+		uart0: uart@30890000 {
+			compatible = "uart,dummy";
+			reg = <0x30890000 0x1000>;
+			status = "disabled";
+			label = "UART_0";
+		};
+
+		/*
+		 * FIXME: The flash and sram regions are not correct.
+		 * I've chosen the values based on Jailhouse configuration.
+		 */
+		flash0: flash@40000000 {
+			compatible = "serial-flash";
+			reg = <0x40000000 0x1>;
+		};
+
+		sram0: memory@0 {
+			device_type = "memory";
+			compatible = "mmio-sram";
+			reg = <0x0 0x100000>;
+		};
+
+		arch_timer: timer {
+			compatible = "arm,arm-timer";
+			interrupts = <GIC_PPI 13 IRQ_DEFAULT_PRIORITY
+					IRQ_TYPE_EDGE>,
+				     <GIC_PPI 14 IRQ_DEFAULT_PRIORITY
+					IRQ_TYPE_EDGE>,
+				     <GIC_PPI 11 IRQ_DEFAULT_PRIORITY
+					IRQ_TYPE_EDGE>,
+				     <GIC_PPI 10 IRQ_DEFAULT_PRIORITY
+					IRQ_TYPE_EDGE>;
+			label = "arch_timer";
+		};
+	};
+};

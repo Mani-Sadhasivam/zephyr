@@ -1,0 +1,15 @@
+# Kconfig - i.MX8MM A53 SoC series
+#
+# Copyright (c) 2019, Manivannan Sadhasivam <mani@kernel.org>
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+choice
+prompt "i.MX8MM A53 Selection"
+depends on SOC_SERIES_IMX8MM_A53
+
+config SOC_MIMX8MM6_A53
+	bool "SOC_MIMX8MM6_A53"
+
+endchoice

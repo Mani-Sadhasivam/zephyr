@@ -1,0 +1,12 @@
+title: Dummy UART
+
+description: |
+    This binding gives a base representation of the Dummy UART
+
+compatible: "uart,dummy"
+
+include: uart-controller.yaml
+
+properties:
+    reg:
+      required: true

@@ -1,0 +1,17 @@
+# Kconfig.series - i.MX8MM A53 core series
+#
+# Copyright (c) 2019, Manivannan Sadhasivam <mani@kernel.org>
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+config SOC_SERIES_IMX8MM_A53
+	bool "i.MX8MM A53 Core Series"
+	select CPU_CORTEX_A53
+	select GICV3
+	select SOC_FAMILY_IMX
+	select MULTI_LEVEL_INTERRUPTS
+	select 2ND_LEVEL_INTERRUPTS
+	select BUILD_OUTPUT_HEX
+	help
+	  Enable support for i.MX7 M4 MCU series

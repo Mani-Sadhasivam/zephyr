@@ -1,0 +1,24 @@
+/*
+ * Copyright (c) 2019 Manivannan Sadhasivam <mani@kernel.org>
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ */
+
+/dts-v1/;
+#include <nxp/nxp_imx8mm_a53.dtsi>
+
+/ {
+	model = "NXP i.MX8M Mini EVK board (A53)";
+	compatible = "nxp,mimx8mm_evk";
+
+	chosen {
+		zephyr,console = &uart0;
+		zephyr,sram = &sram0;
+		zephyr,flash = &sram0;
+	};
+};
+
+&uart0 {
+	status = "okay";
+};

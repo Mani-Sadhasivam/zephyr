@@ -1,0 +1,29 @@
+# Kconfig.defconfig.mimx8mm6_a53 - MIMX8MM6 A53 SoC defconfig
+#
+# Copyright (c) 2019, Manivannan Sadhasivam <mani@kernel.org>
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+if SOC_MIMX8MM6_A53
+
+config SOC
+	default "mimx8mm6"
+
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+	default 8000000 # Frequency of arch timer
+
+if SERIAL
+
+config UART_DUMMY # TODO: Fix it
+	default y
+
+endif # SERIAL
+
+config FLASH_SIZE
+	default $(dt_chosen_reg_size_int,$(DT_CHOSEN_Z_FLASH),0,K)
+
+config FLASH_BASE_ADDRESS
+	default $(dt_chosen_reg_addr_hex,$(DT_CHOSEN_Z_FLASH))
+
+endif # SOC_MIMX8MM6_A53

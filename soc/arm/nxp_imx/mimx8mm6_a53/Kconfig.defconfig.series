@@ -1,0 +1,29 @@
+# Kconfig.defconfig.series - i.MX8MM A53 SoC series defconfig
+#
+# Copyright (c) 2019, Manivannan Sadhasivam <mani@kernel.org>
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+if SOC_SERIES_IMX8MM_A53
+
+config SOC_SERIES
+	default "mimx8mm6_a53"
+
+config NUM_IRQS
+	# must be >= the highest interrupt number used
+	# - include the UART interrupts
+	default 220
+
+config 2ND_LVL_ISR_TBL_OFFSET
+	default 1
+
+config MAX_IRQ_PER_AGGREGATOR
+	default 219
+
+config NUM_2ND_LEVEL_AGGREGATORS
+	default 1
+
+source "soc/arm/nxp_imx/mimx8mm6_a53/Kconfig.defconfig.mimx8mm6_a53"
+
+endif # SOC_SERIES_IMX8MM_A53

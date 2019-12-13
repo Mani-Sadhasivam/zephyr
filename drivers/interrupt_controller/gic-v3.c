@@ -12,9 +12,7 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 
 #define GIC_DIST_BASE		DT_INST_0_ARM_GIC_BASE_ADDRESS_0
-
-/* HACK: Use dynamic affinity detection using MPIDR */
-#define GIC_RDIST_BASE		DT_INST_0_ARM_GIC_BASE_ADDRESS_1 + 0x40000
+#define GIC_RDIST_BASE		DT_INST_0_ARM_GIC_BASE_ADDRESS_1
 
 #define GICR_SGIBASE_OFFSET	0x10000
 
@@ -34,9 +32,6 @@
 #define	GIC_ICFGR		0xc00
 #define GIC_IGROUPMODR		0xd00
 #define	GIC_SGIR		0xf00
-
-#define	GICD_CTRL		GIC_DIST_BASE
-#define	GICR_CTRL		GIC_RDIST_BASE
 
 #define GICR_WAKER		0x14
 #define GIC_WAKER_PS		0x1
@@ -72,6 +67,7 @@
 #define ICC_EOIR0_EL1           S3_0_c12_c8_1
 #define ICC_EOIR1_EL1           S3_0_c12_c12_1
 #define ICC_SGI0R_EL1           S3_0_c12_c11_7
+#define MPIDR_EL1               S3_0_c0_c0_5
 
 #define	GIC_SPI_BASE		32
 
@@ -91,6 +87,14 @@
 
 #define GIC_INIT_PRIORITY_DEFAULT 0
 
+#define GICR_TYPER              0x0008
+#define GICR_TYPER_Last         (1 << 4)
+#define GICR_PIDR2              0xffe8
+#define GICD_PIDR2_ARCH(pidr)	(((pidr) & 0xf0) >> 4)
+#define GICR_PIDR2_ARCH		GICD_PIDR2_ARCH
+
+#define MPIDR_CPU_MASK		0x3
+
 #define ZEPHYR_NS_STATE		1
 
 #define read_sysreg(reg) ({					\
@@ -107,6 +111,8 @@ struct gic_ictl_config {
 	u32_t isr_table_offset;
 };
 
+static mem_addr_t rdist_addr;
+
 /*
  * wait for read write progress
  * TODO: add timed wait
@@ -115,7 +121,7 @@ static int gic_wait_rwp(uint32_t intid)
 {
 	mem_addr_t base;
 
-	base = (intid < GIC_SPI_BASE) ? GICR_CTRL : GICD_CTRL;
+	base = (intid < GIC_SPI_BASE) ? rdist_addr : GIC_DIST_BASE;
 
 	while (sys_read32(base) & BIT(RWP))
 		;
@@ -132,7 +138,7 @@ void gic_intr_config(u32_t intid, uint32_t prio, uint32_t flags)
 	mem_addr_t base;
 
 	base = (intid < GIC_SPI_BASE) ?
-	       (GIC_RDIST_BASE + GICR_SGIBASE_OFFSET)
+	       (rdist_addr + GICR_SGIBASE_OFFSET)
 	       : GIC_DIST_BASE;
 
 	/* Disable the interrupt */
@@ -161,12 +167,12 @@ static void gic_intr_enable(struct device *dev, uint32_t intid)
 	gic_intr_config(intid, 0, 0);
 
 	base = (intid < GIC_SPI_BASE) ?
-	       (GIC_RDIST_BASE + GICR_SGIBASE_OFFSET)
+	       (rdist_addr + GICR_SGIBASE_OFFSET)
 	       : GIC_DIST_BASE;
 
 	sys_write32(mask, ISENABLER(base, idx));
 
-	printk("Enable INTID %d\n", intid);
+	printk("Enable INTID %d\n\n", intid);
 }
 
 static void gic_intr_disable(struct device *dev, uint32_t intid)
@@ -176,7 +182,7 @@ static void gic_intr_disable(struct device *dev, uint32_t intid)
 	mem_addr_t base;
 
 	base = (intid < GIC_SPI_BASE) ?
-	       (GIC_RDIST_BASE + GICR_SGIBASE_OFFSET)
+	       (rdist_addr + GICR_SGIBASE_OFFSET)
 	       : GIC_DIST_BASE;
 
 	sys_write32(~mask, ICENABLER(base, idx));
@@ -190,13 +196,44 @@ static void gic_intr_disable(struct device *dev, uint32_t intid)
  * ProcessSleep to be cleared only when ChildAsleep is set
  * Check if redistributor is not powered already.
  */
-static void gic_rdist_enable(mem_addr_t rdist)
+static void gic_rdist_enable(void)
 {
-	if (!(sys_read32(rdist + GICR_WAKER) & BIT(GIC_WAKER_CA)))
+	u64_t mpidr, typer;
+	u32_t pidr, cpu_id;
+	mem_addr_t gicr = 0x0;
+	mem_addr_t redist_addr = 0x0;
+
+	redist_addr = GIC_RDIST_BASE;
+
+	/* Get the current CPU ID */
+	mpidr = read_sysreg(MPIDR_EL1);
+	cpu_id = mpidr & MPIDR_CPU_MASK;
+
+	/* Get the Redistributor base address for the current CPU */
+	do {
+		pidr = sys_read32(redist_addr + GICR_PIDR2);
+		if (GICR_PIDR2_ARCH(pidr) != 3)
+			break;
+
+		typer = sys_read64(redist_addr + GICR_TYPER);
+		if ((typer >> 32) == cpu_id) {
+			gicr = redist_addr;
+			break;
+		}
+
+		redist_addr += 0x20000;
+	} while (!(typer & GICR_TYPER_Last));
+
+	if (!gicr)
 		return;
 
-	sys_clear_bit(rdist + GICR_WAKER, GIC_WAKER_PS);
-	while (sys_read32(rdist + GICR_WAKER) & BIT(GIC_WAKER_CA))
+	rdist_addr = gicr;
+
+	if (!(sys_read32(rdist_addr + GICR_WAKER) & BIT(GIC_WAKER_CA)))
+		return;
+
+	sys_clear_bit(rdist_addr + GICR_WAKER, GIC_WAKER_PS);
+	while (sys_read32(rdist_addr + GICR_WAKER) & BIT(GIC_WAKER_CA))
 		;
 }
 
@@ -206,7 +243,7 @@ static void gic_cpuif_init(void)
 	u32_t icc_sre;
 
 	/* disable all sgi ppi */
-	sys_write32(~0, ICENABLER((GIC_RDIST_BASE + GICR_SGIBASE_OFFSET), 0));
+	sys_write32(~0, ICENABLER((rdist_addr + GICR_SGIBASE_OFFSET), 0));
 	/* any sgi/ppi intid ie. 0-31 will select GICR_CTRL */
 	gic_wait_rwp(0);
 
@@ -232,11 +269,11 @@ static void gic_dist_init(void)
 {
 #ifndef ZEPHYR_NS_STATE
 	/* enable Group 1 secure interrupts */
-	sys_set_bit(GICD_CTRL, ENABLE_G1S);
+	sys_set_bit(GIC_DIST_BASE, ENABLE_G1S);
 #else
 	/* enable Group 1 non secure interrupts */
 	/* TODO: handle legacy mode based on ARE_NS */
-	sys_set_bit(GICD_CTRL, ENABLE_G1NS);
+	sys_set_bit(GIC_DIST_BASE, ENABLE_G1NS);
 #endif
 }
 
@@ -294,7 +331,7 @@ static int gic_init(struct device *unused)
 		    DEVICE_GET(arm_gicv3), GIC_PARENT_IRQ_FLAGS);
 
 	gic_dist_init();
-	gic_rdist_enable(GIC_RDIST_BASE);
+	gic_rdist_enable();
 	gic_cpuif_init();
 
 	return 0;

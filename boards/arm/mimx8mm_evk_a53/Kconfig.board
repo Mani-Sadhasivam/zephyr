@@ -1,0 +1,9 @@
+#
+# Copyright (c) 2019 Manivannan Sadhasivam <mani@kernel.org>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+config BOARD_MIMX8MM_EVK_A53
+	bool "NXP i.MX8M Mini EVK (A53)"
+	depends on SOC_SERIES_IMX8MM_A53
+	select ARM64

@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig UART_DUMMY
+	bool "MCUX uart driver"
+	select SERIAL_HAS_DRIVER
+	help
+	  Enable the Dummy uart driver.
