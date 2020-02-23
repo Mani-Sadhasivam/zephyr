@@ -2,6 +2,7 @@
 
 add_subdirectory(debug)
 add_subdirectory(logging)
+add_subdirectory_ifdef(CONFIG_LORA		   lorawan)
 add_subdirectory_ifdef(CONFIG_BT                   bluetooth)
 add_subdirectory_ifdef(CONFIG_CONSOLE_SUBSYS       console)
 add_subdirectory_ifdef(CONFIG_SHELL                shell)

@@ -11,6 +11,7 @@
 #include <zephyr.h>
 
 #include <sx1276/sx1276.h>
+#include <timer.h>
 
 #define LOG_LEVEL CONFIG_LORA_LOG_LEVEL
 #include <logging/log.h>
@@ -24,6 +25,13 @@ LOG_MODULE_REGISTER(sx1276);
 #define SX1276_REG_PA_DAC			0x4d
 #define SX1276_REG_VERSION			0x42
 
+#define BOARD_TCXO_WAKEUP_TIME	5
+#define ALARM_CHANNEL		0
+
+/* TODO: Use RTC backup */
+static volatile uint32_t backup_reg[2] = { 0 ,0 };
+static uint32_t saved_time;
+struct counter_alarm_cfg alarm_cfg;
 extern DioIrqHandler *DioIrq[];
 
 struct sx1276_dio {
@@ -63,7 +71,13 @@ bool SX1276CheckRfFrequency(uint32_t frequency)
 
 void RtcStopAlarm(void)
 {
-	counter_stop(dev_data.counter);
+	counter_cancel_channel_alarm(dev_data.counter, ALARM_CHANNEL);
+}
+
+static void alarm_callback(struct device *counter_dev, u8_t chan_id,
+			   u32_t ticks, void *user_data)
+{
+	TimerIrqHandler();
 }
 
 void SX1276SetAntSwLowPower(bool status)
@@ -74,6 +88,11 @@ void SX1276SetAntSwLowPower(bool status)
 void SX1276SetBoardTcxo(u8_t state)
 {
 	/* TODO */
+}
+
+uint32_t SX1276GetBoardTcxoWakeupTime(void)
+{
+	return BOARD_TCXO_WAKEUP_TIME;
 }
 
 void SX1276SetAntSw(u8_t opMode)
@@ -103,7 +122,7 @@ void BoardCriticalSectionEnd(uint32_t *mask)
 	irq_unlock(*mask);
 }
 
-uint32_t RtcGetTimerElapsedTime(void)
+uint32_t RtcGetTimerValue(void)
 {
 	u32_t ticks;
 	int err;
@@ -117,35 +136,87 @@ uint32_t RtcGetTimerElapsedTime(void)
 	return ticks;
 }
 
+uint32_t RtcGetTimerElapsedTime(void)
+{
+	u32_t ticks;
+
+	counter_get_value(dev_data.counter, &ticks);
+	return (ticks - saved_time);
+}
+
 u32_t RtcGetMinimumTimeout(void)
 {
 	/* TODO: Get this value from counter driver */
-	return 3;
+	return 1;
 }
 
 void RtcSetAlarm(uint32_t timeout)
 {
-	struct counter_alarm_cfg alarm_cfg;
+	int ret;
+
+	RtcStopAlarm();
 
 	alarm_cfg.flags = 0;
 	alarm_cfg.ticks = timeout;
+	alarm_cfg.callback = alarm_callback;
+	alarm_cfg.user_data = &alarm_cfg;
 
-	counter_set_channel_alarm(dev_data.counter, 0, &alarm_cfg);
+	ret = counter_set_channel_alarm(dev_data.counter, ALARM_CHANNEL,
+					&alarm_cfg);
+	if (ret < 0)
+		LOG_ERR("Unable to set alarm: %d\n", ret);
 }
 
 uint32_t RtcSetTimerContext(void)
 {
-	return 0;
+	counter_get_value(dev_data.counter, &saved_time);
+
+	return saved_time;
+}
+
+uint32_t RtcGetTimerContext(void)
+{
+	return saved_time;
 }
 
 uint32_t RtcMs2Tick(uint32_t milliseconds)
 {
-	return counter_us_to_ticks(dev_data.counter, (milliseconds / 1000));
+	return counter_us_to_ticks(dev_data.counter,
+				   (milliseconds * USEC_PER_MSEC));
+}
+
+uint32_t RtcTick2Ms(uint32_t tick)
+{
+	return (counter_ticks_to_us(dev_data.counter, tick) / USEC_PER_MSEC);
 }
 
 void DelayMsMcu(uint32_t ms)
 {
 	k_sleep(ms);
+}
+
+uint32_t RtcGetCalendarTime(uint16_t *milliseconds)
+{
+	u32_t time_us, ticks;
+
+	counter_get_value(dev_data.counter, &ticks);
+	time_us = counter_ticks_to_us(dev_data.counter, ticks);
+	*milliseconds = time_us / USEC_PER_MSEC;
+
+	/* Return in seconds */
+	return time_us / USEC_PER_SEC;
+}
+
+void RtcBkupWrite(uint32_t data0, uint32_t data1)
+{
+	backup_reg[0] = data0;
+	backup_reg[1] = data1;
+}
+
+void RtcBkupRead(uint32_t *data0, uint32_t *data1)
+{
+	*data0 = backup_reg[0];
+	*data1 = backup_reg[1];
 }
 
 static void sx1276_irq_callback(struct device *dev,
@@ -426,6 +497,8 @@ const struct Radio_s Radio = {
 	.Random = SX1276Random,
 	.SetRxConfig = SX1276SetRxConfig,
 	.SetTxConfig = SX1276SetTxConfig,
+	.CheckRfFrequency = SX1276CheckRfFrequency,
+	.TimeOnAir = SX1276GetTimeOnAir,
 	.Send = SX1276Send,
 	.Sleep = SX1276SetSleep,
 	.Standby = SX1276SetStby,
@@ -435,6 +508,8 @@ const struct Radio_s Radio = {
 	.WriteBuffer = SX1276WriteBuffer,
 	.ReadBuffer = SX1276ReadBuffer,
 	.SetMaxPayloadLength = SX1276SetMaxPayloadLength,
+	.SetPublicNetwork = SX1276SetPublicNetwork,
+	.GetWakeupTime = SX1276GetWakeupTime,
 	.IrqProcess = NULL,
 	.RxBoosted = NULL,
 	.SetRxDutyCycle = NULL,
@@ -499,11 +574,15 @@ static int sx1276_lora_init(struct device *dev)
 
 	k_sem_init(&dev_data.data_sem, 0, UINT_MAX);
 
+#ifdef CONFIG_LORAWAN
+	counter_start(dev_data.counter);
+#endif
+
 	dev_data.sx1276_event.TxDone = sx1276_tx_done;
 	dev_data.sx1276_event.RxDone = sx1276_rx_done;
 	Radio.Init(&dev_data.sx1276_event);
 
-	LOG_INF("SX1276 Version:%02x found", regval);
+	LOG_DBG("SX1276 Version:%02x found", regval);
 
 	return 0;
 }
