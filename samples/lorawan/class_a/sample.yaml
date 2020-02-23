@@ -1,0 +1,8 @@
+common:
+   tags: lora
+sample:
+   description: Demonstration of ClassA LoRaWAN functionality
+   name: LoRaWAN ClassA
+tests:
+   samples.lorawan.class_a:
+     platform_whitelist: 96b_wistrio
