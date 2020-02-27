@@ -70,6 +70,7 @@ struct lorawan_mib_config {
 	u32_t join_acc_delay1;
 	u32_t join_acc_delay2;
 	bool adr_enable;
+	u32_t system_max_rs_error;
 };
 
 /* TODO: Convert to APIs */

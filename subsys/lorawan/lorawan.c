@@ -196,6 +196,10 @@ int lorawan_config(struct lorawan_mib_config *mib_config)
 	mibReq.Param.JoinAcceptDelay2 = mib_config->join_acc_delay2;
 	LoRaMacMibSetRequestConfirm(&mibReq);
 
+	mibReq.Type = MIB_SYSTEM_MAX_RX_ERROR;
+	mibReq.Param.SystemMaxRxError = mib_config->system_max_rs_error;
+	LoRaMacMibSetRequestConfirm(&mibReq);
+
 	return 0;
 }
 
