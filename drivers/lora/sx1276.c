@@ -112,17 +112,16 @@ void BoardCriticalSectionEnd(uint32_t *mask)
 
 uint32_t RtcGetTimerValue(void)
 {
-	return k_uptime_get_32();
+	return k_ms_to_ticks_ceil32(k_uptime_get_32());
 }
 
 uint32_t RtcGetTimerElapsedTime(void)
 {
-	return (k_uptime_get_32() - saved_time);
+	return (k_ms_to_ticks_ceil32(k_uptime_get_32()) - saved_time);
 }
 
 u32_t RtcGetMinimumTimeout(void)
 {
-	/* TODO: Get this value from counter driver */
 	return 1;
 }
 
@@ -144,7 +143,7 @@ void RtcSetAlarm(uint32_t timeout)
 
 uint32_t RtcSetTimerContext(void)
 {
-	saved_time = k_uptime_get_32();
+	saved_time = k_ms_to_ticks_ceil32(k_uptime_get_32());
 
 	return saved_time;
 }
@@ -173,10 +172,10 @@ uint32_t RtcGetCalendarTime(uint16_t *milliseconds)
 {
 	u32_t now = k_uptime_get_32();
 
-	*milliseconds = k_ticks_to_ms_floor32(now);
+	*milliseconds = now;
 
 	/* Return in seconds */
-	return k_ticks_to_ms_floor32(now) / MSEC_PER_SEC;
+	return now / MSEC_PER_SEC;
 }
 
 void RtcBkupWrite(uint32_t data0, uint32_t data1)
