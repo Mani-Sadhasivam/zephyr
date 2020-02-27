@@ -21,7 +21,7 @@
 #define LORAWAN_APP_KEY         	{ 0x8A, 0x74, 0xB4, 0x96, 0xF6, 0x6D,\
 					  0xA6, 0xD2, 0xE7, 0x7E, 0x12, 0x3E,\
 					  0xB2, 0x25, 0x0C, 0x5E }
-#define LORAWAN_DEFAULT_DATARATE	LORAWAN_DR_0
+#define LORAWAN_DEFAULT_DATARATE	LORAWAN_DR_3
 
 #define MAX_DATA_LEN 10
 
@@ -54,8 +54,8 @@ void main(void)
 	mib_config.app_key = app_key;
 	mib_config.nwk_key = app_key;
 	mib_config.adr_enable = true;
-	mib_config.join_acc_delay1 = 6000;
-	mib_config.join_acc_delay2 = 7000;
+	mib_config.join_acc_delay1 = 5000;
+	mib_config.join_acc_delay2 = 6000;
 	mib_config.system_max_rs_error = 20;
 
 	LOG_INF("Configuring MIB");

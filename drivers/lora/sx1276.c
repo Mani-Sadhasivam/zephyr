@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <drivers/counter.h>
 #include <drivers/gpio.h>
 #include <drivers/lora.h>
 #include <drivers/spi.h>
@@ -31,7 +30,6 @@ LOG_MODULE_REGISTER(sx1276);
 /* TODO: Use RTC backup */
 static volatile uint32_t backup_reg[2] = { 0 ,0 };
 static uint32_t saved_time;
-struct counter_alarm_cfg alarm_cfg;
 extern DioIrqHandler *DioIrq[];
 
 struct sx1276_dio {
@@ -50,7 +48,6 @@ static struct sx1276_dio sx1276_dios[] =
 #define SX1276_MAX_DIO ARRAY_SIZE(sx1276_dios)
 
 struct sx1276_data {
-	struct device *counter;
 	struct device *reset;
 	struct device *spi;
 	struct spi_config spi_cfg;
@@ -63,21 +60,12 @@ struct sx1276_data {
 	s16_t rssi;
 } dev_data;
 
+static struct k_timer timer;
+
 bool SX1276CheckRfFrequency(uint32_t frequency)
 {
 	/* TODO */
 	return true;
-}
-
-void RtcStopAlarm(void)
-{
-	counter_cancel_channel_alarm(dev_data.counter, ALARM_CHANNEL);
-}
-
-static void alarm_callback(struct device *counter_dev, u8_t chan_id,
-			   u32_t ticks, void *user_data)
-{
-	TimerIrqHandler();
 }
 
 void SX1276SetAntSwLowPower(bool status)
@@ -124,24 +112,12 @@ void BoardCriticalSectionEnd(uint32_t *mask)
 
 uint32_t RtcGetTimerValue(void)
 {
-	u32_t ticks;
-	int err;
-
-	err = counter_get_value(dev_data.counter, &ticks);
-	if (err) {
-		LOG_ERR("Failed to read counter value (err %d)", err);
-		return 0;
-	}
-
-	return ticks;
+	return k_uptime_get_32();
 }
 
 uint32_t RtcGetTimerElapsedTime(void)
 {
-	u32_t ticks;
-
-	counter_get_value(dev_data.counter, &ticks);
-	return (ticks - saved_time);
+	return (k_uptime_get_32() - saved_time);
 }
 
 u32_t RtcGetMinimumTimeout(void)
@@ -150,26 +126,25 @@ u32_t RtcGetMinimumTimeout(void)
 	return 1;
 }
 
+void RtcStopAlarm(void)
+{
+	k_timer_stop(&timer);
+}
+
+static void timer_callback(struct k_timer *_timer)
+{
+	k_timer_stop(&timer);
+	TimerIrqHandler();
+}
+
 void RtcSetAlarm(uint32_t timeout)
 {
-	int ret;
-
-	RtcStopAlarm();
-
-	alarm_cfg.flags = 0;
-	alarm_cfg.ticks = timeout;
-	alarm_cfg.callback = alarm_callback;
-	alarm_cfg.user_data = &alarm_cfg;
-
-	ret = counter_set_channel_alarm(dev_data.counter, ALARM_CHANNEL,
-					&alarm_cfg);
-	if (ret < 0)
-		LOG_ERR("Unable to set alarm: %d\n", ret);
+	k_timer_start(&timer, k_ticks_to_ms_floor32(timeout), K_NO_WAIT);
 }
 
 uint32_t RtcSetTimerContext(void)
 {
-	counter_get_value(dev_data.counter, &saved_time);
+	saved_time = k_uptime_get_32();
 
 	return saved_time;
 }
@@ -181,13 +156,12 @@ uint32_t RtcGetTimerContext(void)
 
 uint32_t RtcMs2Tick(uint32_t milliseconds)
 {
-	return counter_us_to_ticks(dev_data.counter,
-				   (milliseconds * USEC_PER_MSEC));
+	return k_ms_to_ticks_ceil32(milliseconds);
 }
 
 uint32_t RtcTick2Ms(uint32_t tick)
 {
-	return (counter_ticks_to_us(dev_data.counter, tick) / USEC_PER_MSEC);
+	return k_ticks_to_ms_floor32(tick);
 }
 
 void DelayMsMcu(uint32_t ms)
@@ -197,14 +171,12 @@ void DelayMsMcu(uint32_t ms)
 
 uint32_t RtcGetCalendarTime(uint16_t *milliseconds)
 {
-	u32_t time_us, ticks;
+	u32_t now = k_uptime_get_32();
 
-	counter_get_value(dev_data.counter, &ticks);
-	time_us = counter_ticks_to_us(dev_data.counter, ticks);
-	*milliseconds = time_us / USEC_PER_MSEC;
+	*milliseconds = k_ticks_to_ms_floor32(now);
 
 	/* Return in seconds */
-	return time_us / USEC_PER_SEC;
+	return k_ticks_to_ms_floor32(now) / MSEC_PER_SEC;
 }
 
 void RtcBkupWrite(uint32_t data0, uint32_t data1)
@@ -566,16 +538,10 @@ static int sx1276_lora_init(struct device *dev)
 		return -EIO;
 	}
 
-	dev_data.counter = device_get_binding(DT_RTC_0_NAME);
-	if (!dev_data.counter) {
-		LOG_ERR("Cannot get pointer to %s device", DT_RTC_0_NAME);
-		return -EIO;
-	}
-
 	k_sem_init(&dev_data.data_sem, 0, UINT_MAX);
 
 #ifdef CONFIG_LORAWAN
-	counter_start(dev_data.counter);
+	k_timer_init(&timer, timer_callback, NULL);
 #endif
 
 	dev_data.sx1276_event.TxDone = sx1276_tx_done;
