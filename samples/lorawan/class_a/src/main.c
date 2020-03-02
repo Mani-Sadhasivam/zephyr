@@ -54,8 +54,6 @@ void main(void)
 	mib_config.app_key = app_key;
 	mib_config.nwk_key = app_key;
 	mib_config.adr_enable = true;
-	mib_config.join_acc_delay1 = 5000;
-	mib_config.join_acc_delay2 = 6000;
 	mib_config.system_max_rs_error = 20;
 
 	LOG_INF("Configuring MIB");
@@ -69,10 +67,13 @@ void main(void)
 		return;
 	
 	LOG_INF("Sending data...");
-	ret = lorawan_send(2, LORAWAN_DEFAULT_DATARATE, data, MAX_DATA_LEN,
-			   true, 1);
-	if (ret < 0)
-		return;
+	while(1) {
+		ret = lorawan_send(2, LORAWAN_DEFAULT_DATARATE, data,
+				   MAX_DATA_LEN, true, 1);
+		if (ret < 0)
+			return;
 
-	LOG_INF("Data sent!");
+		LOG_INF("Data sent!");
+		k_sleep(5000);
+	}
 }

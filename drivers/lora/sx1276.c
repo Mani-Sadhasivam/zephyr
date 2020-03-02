@@ -7,8 +7,10 @@
 #include <drivers/gpio.h>
 #include <drivers/lora.h>
 #include <drivers/spi.h>
+#include <timeout_q.h>
 #include <zephyr.h>
 
+/* LoRaMac-node specific includes */
 #include <sx1276/sx1276.h>
 #include <timer.h>
 
@@ -27,9 +29,9 @@ LOG_MODULE_REGISTER(sx1276);
 #define BOARD_TCXO_WAKEUP_TIME	5
 #define ALARM_CHANNEL		0
 
-/* TODO: Use RTC backup */
+/* TODO: use non volatile memory for backup */
 static volatile uint32_t backup_reg[2] = { 0 ,0 };
-static uint32_t saved_time;
+static u32_t saved_time;
 extern DioIrqHandler *DioIrq[];
 
 struct sx1276_dio {
@@ -53,14 +55,13 @@ struct sx1276_data {
 	struct spi_config spi_cfg;
 	struct device *dio_dev[SX1276_MAX_DIO];
 	struct k_sem data_sem;
+	struct _timeout timeout;
 	RadioEvents_t sx1276_event;
 	u8_t *rx_buf;
 	u8_t rx_len;
 	s8_t snr;
 	s16_t rssi;
 } dev_data;
-
-static struct k_timer timer;
 
 bool SX1276CheckRfFrequency(uint32_t frequency)
 {
@@ -127,18 +128,19 @@ u32_t RtcGetMinimumTimeout(void)
 
 void RtcStopAlarm(void)
 {
-	k_timer_stop(&timer);
+	z_abort_timeout(&dev_data.timeout);
 }
 
-static void timer_callback(struct k_timer *_timer)
+static void timeout_handler(struct _timeout *to)
 {
-	k_timer_stop(&timer);
+	ARG_UNUSED(to);
+
 	TimerIrqHandler();
 }
 
 void RtcSetAlarm(uint32_t timeout)
 {
-	k_timer_start(&timer, k_ticks_to_ms_floor32(timeout), K_NO_WAIT);
+	z_add_timeout(&dev_data.timeout, timeout_handler, timeout);
 }
 
 uint32_t RtcSetTimerContext(void)
@@ -540,7 +542,7 @@ static int sx1276_lora_init(struct device *dev)
 	k_sem_init(&dev_data.data_sem, 0, UINT_MAX);
 
 #ifdef CONFIG_LORAWAN
-	k_timer_init(&timer, timer_callback, NULL);
+	z_init_timeout(&dev_data.timeout);
 #endif
 
 	dev_data.sx1276_event.TxDone = sx1276_tx_done;

@@ -144,7 +144,7 @@ static void MlmeConfirm( MlmeConfirm_t *mlmeConfirm )
 		mibGet.Type = MIB_DEV_ADDR;
 		LoRaMacMibGetRequestConfirm(&mibGet);
 		k_sem_give(&lorawan_config_sem);
-		LOG_DBG("Joined network! DevAddr: %08x", mibGet.Param.DevAddr);
+		LOG_INF("Joined network! DevAddr: %08x", mibGet.Param.DevAddr);
 		break;
 	case MLME_LINK_CHECK:
 		/* Not implemented */
@@ -186,14 +186,6 @@ int lorawan_config(struct lorawan_mib_config *mib_config)
 	/* LoRaWAN is by default a public network */
 	mibReq.Type = MIB_PUBLIC_NETWORK;
 	mibReq.Param.EnablePublicNetwork = true;
-	LoRaMacMibSetRequestConfirm(&mibReq);
-
-	mibReq.Type = MIB_JOIN_ACCEPT_DELAY_1;
-	mibReq.Param.JoinAcceptDelay1 = mib_config->join_acc_delay1;
-	LoRaMacMibSetRequestConfirm(&mibReq);
-
-	mibReq.Type = MIB_JOIN_ACCEPT_DELAY_2;
-	mibReq.Param.JoinAcceptDelay2 = mib_config->join_acc_delay2;
 	LoRaMacMibSetRequestConfirm(&mibReq);
 
 	mibReq.Type = MIB_SYSTEM_MAX_RX_ERROR;
