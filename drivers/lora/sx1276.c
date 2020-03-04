@@ -15,6 +15,7 @@
 
 /* LoRaMac-node specific includes */
 #include <sx1276/sx1276.h>
+#include <timer.h>
 
 #define LOG_LEVEL CONFIG_LORA_LOG_LEVEL
 #include <logging/log.h>
@@ -82,6 +83,7 @@ BUILD_ASSERT(0, "None of rfo-enable-gpios, pa-boost-enable-gpios and "
 #define SX1276_REG_VERSION			0x42
 
 #define SX1276_PA_CONFIG_MAX_POWER_SHIFT	4
+#define BOARD_TCXO_WAKEUP_TIME	5
 
 extern DioIrqHandler *DioIrq[];
 
@@ -149,6 +151,11 @@ bool SX1276CheckRfFrequency(uint32_t frequency)
 {
 	/* TODO */
 	return true;
+}
+
+uint32_t SX1276GetBoardTcxoWakeupTime(void)
+{
+	return BOARD_TCXO_WAKEUP_TIME;
 }
 
 static inline void sx1276_antenna_enable(int val)
@@ -443,6 +450,7 @@ const struct Radio_s Radio = {
 	.Random = SX1276Random,
 	.SetRxConfig = SX1276SetRxConfig,
 	.SetTxConfig = SX1276SetTxConfig,
+	.TimeOnAir = SX1276GetTimeOnAir,
 	.Send = SX1276Send,
 	.Sleep = SX1276SetSleep,
 	.Standby = SX1276SetStby,
@@ -452,6 +460,8 @@ const struct Radio_s Radio = {
 	.WriteBuffer = SX1276WriteBuffer,
 	.ReadBuffer = SX1276ReadBuffer,
 	.SetMaxPayloadLength = SX1276SetMaxPayloadLength,
+	.SetPublicNetwork = SX1276SetPublicNetwork,
+	.GetWakeupTime = SX1276GetWakeupTime,
 	.IrqProcess = NULL,
 	.RxBoosted = NULL,
 	.SetRxDutyCycle = NULL,
