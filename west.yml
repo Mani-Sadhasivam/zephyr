@@ -101,7 +101,7 @@ manifest:
       revision: 724f7e2a4519d7e1d40ef330042682dea950c991
       path: modules/lib/open-amp
     - name: loramac-node
-      revision: 29e516ec585b1a909af2b5f1c60d83e7d4d563e3
+      revision: 85f21c03ed765ce36ac917978a2eff5fae1dbccf
       path: modules/lib/loramac-node
     - name: openthread
       revision: 44e3608c066910bd18b6dc808770496f967129af
