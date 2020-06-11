@@ -1,0 +1,34 @@
+/*
+ * This overlay suits Adafrut Feather M0 LoRa edition.
+ * 
+ * Copyritght (c) 2020: R3-IoT Ltd.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+&sercom4 {
+	status = "okay";
+	compatible = "atmel,sam0-spi";
+
+	cs-gpios = <&porta 6 0>;
+
+	dipo = <0>;
+	dopo = <1>;
+
+	lora: sx1276@0 {
+		compatible = "semtech,sx1276";
+		reg = <0>;
+		label = "sx1276";
+		reset-gpios = <&portb 13 0>;
+		dio-gpios = <&porta 9 0>;
+
+		spi-max-frequency = <1000000>;
+	};
+};
+
+/ {
+
+	aliases {
+		lora0 = &lora;
+	};
+};

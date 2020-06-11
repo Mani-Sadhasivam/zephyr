@@ -110,5 +110,40 @@ int lorawan_join_network(enum lorawan_datarate datarate,
  */
 int lorawan_send(u8_t port, enum lorawan_datarate datarate,
 		 u8_t *data, u8_t len, bool confirm, u8_t tries);
+/**
+ * @brief Check if there is uncollected received data from the LoRaWAN network
+ *
+ * Check if there is uncolllected received data from the LoRaWAN network
+ *
+ * @return 0 or positive number indicating the number of received messages
+ * waiting to be read from the buffer, or negative errno code if failure
+ */
+int lorawan_receive_available();
+
+/**
+ * @brief Check if any uncollected received incoming data was discarded
+ *
+ * Check if any uncollected received incoming data was discarded due to
+ * insufficient free space in the RX buffer.
+ *
+ * @return 0 or positive number indicating the number of discarded messages
+ */
+int lorawan_receive_discarded();
+
+/**
+ * @brief Read uncollected received data from the LoRaWAN network
+ *
+ * Read uncollected received data from the LoRaWAN network. This function will
+ * return each received message only once - each read opration removes the
+ * oldest downlink measage from the buffer of received unread messages.
+ *
+ * @param port       Port at which the message arrived
+ * @param data       Data buffer where received data shall be placed
+ * @param len        Size of the \p data buffer available. Messages with
+ * 		     payloads larger than the buffer will be truncated
+ *
+ * @return 0 if successful, negative errno code if failure
+ */
+int lorawan_receive_read(u8_t *port, u8_t *data, u8_t len);
 
 #endif	/* ZEPHYR_INCLUDE_NET_LORAWAN_H_ */

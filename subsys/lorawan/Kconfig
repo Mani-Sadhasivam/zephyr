@@ -55,4 +55,26 @@ config LORAMAC_REGION_RU864
 
 endchoice
 
+config LORAWAN_USE_RX_RING_BUFFER
+	bool "Use Ring Buffer for Downlink"
+	default False
+	depends on RING_BUFFER
+	help
+	  This value enables a ring buffer to be used for storing incoming
+	  downlink messages instead of only the latest message being available.
+	  Oldest messages are discarded in case of incoming payload not having
+	  enough space in the buffer.
+
+if LORAWAN_USE_RX_RING_BUFFER
+
+config LORAWAN_RX_RING_BUFFER_MAX_SIZE_WORDS
+	int "Downlink Ring Buffer Size in 32-bit words"
+	default 8
+	help
+	  This value defines the maximum number 32-bit words used in a buffer
+	  for downlink messages. Must be at least N+2 where N is the largest
+	  expected downlink payload in 32-bit chunks.
+
+endif # LORAWAN_USE_RX_RING_BUFFER
+
 endif # LORAWAN
