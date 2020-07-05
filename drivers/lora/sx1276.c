@@ -151,6 +151,11 @@ bool SX1276CheckRfFrequency(uint32_t frequency)
 	return true;
 }
 
+uint32_t SX1276GetBoardTcxoWakeupTime(void)
+{
+	return TCXO_POWER_STARTUP_DELAY_MS;
+}
+
 static inline void sx1276_antenna_enable(int val)
 {
 #if DT_INST_NODE_HAS_PROP(0, antenna_enable_gpios)
@@ -443,6 +448,7 @@ const struct Radio_s Radio = {
 	.Random = SX1276Random,
 	.SetRxConfig = SX1276SetRxConfig,
 	.SetTxConfig = SX1276SetTxConfig,
+	.TimeOnAir = SX1276GetTimeOnAir,
 	.Send = SX1276Send,
 	.Sleep = SX1276SetSleep,
 	.Standby = SX1276SetStby,
@@ -452,6 +458,8 @@ const struct Radio_s Radio = {
 	.WriteBuffer = SX1276WriteBuffer,
 	.ReadBuffer = SX1276ReadBuffer,
 	.SetMaxPayloadLength = SX1276SetMaxPayloadLength,
+	.SetPublicNetwork = SX1276SetPublicNetwork,
+	.GetWakeupTime = SX1276GetWakeupTime,
 	.IrqProcess = NULL,
 	.RxBoosted = NULL,
 	.SetRxDutyCycle = NULL,
