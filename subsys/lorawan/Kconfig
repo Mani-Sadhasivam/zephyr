@@ -26,9 +26,12 @@ config LORAWAN_SYSTEM_MAX_RX_ERROR
 
 choice
 	prompt "LoRaWAN Region Selection"
-	default LORAMAC_REGION_IN865
+	default LORAMAC_REGION_UNKNOWN
 	help
 	  Select the LoRaWAN region.
+
+config LORAMAC_REGION_UNKNOWN
+	bool "Unknown region"
 
 config LORAMAC_REGION_AS923
 	bool "Asia 923MHz Frequency band"

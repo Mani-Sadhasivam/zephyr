@@ -14,9 +14,6 @@
 
 #include <device.h>
 
-#define LORAWAN_CONFIRMED_MSG BIT(0)
-#define LORAWAN_UNCONFIRMED_MSG BIT(1)
-
 /**
  * @brief LoRaWAN class types.
  */
@@ -54,6 +51,15 @@ enum lorawan_datarate {
 	LORAWAN_DR_13,
 	LORAWAN_DR_14,
 	LORAWAN_DR_15,
+};
+
+/**
+ * @brief LoRaWAN message types.
+ *
+ * Note: The default behaviour is LORAWAN_MSG_UNCONFIRMED
+ */
+enum lorawan_message_type {
+	LORAWAN_MSG_CONFIRMED = BIT(0),
 };
 
 /**
@@ -125,9 +131,8 @@ int lorawan_start(void);
  *                   buffer is 255 bytes but the actual payload size varies with
  *                   region and datarate.
  * @param flags      Flag used to determine the type of message being sent. It
- *                   could be one of the below:
- *                   * LORAWAN_CONFIRMED_MSG
- *                   * LORAWAN_UNCONFIRMED_MSG
+ *                   could be one of the lorawan_message_type. The default
+ *                   behaviour is unconfirmed message.
  *
  * @return 0 if successful, negative errno code if failure
  */

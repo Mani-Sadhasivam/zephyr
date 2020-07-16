@@ -72,7 +72,7 @@ void main(void)
 	LOG_INF("Sending data...");
 	while (1) {
 		ret = lorawan_send(2, data, sizeof(data),
-				   LORAWAN_CONFIRMED_MSG);
+				   LORAWAN_MSG_CONFIRMED);
 
 		/*
 		 * Note: The stack may return -EAGAIN if the provided data
