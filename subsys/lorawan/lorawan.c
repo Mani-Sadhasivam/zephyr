@@ -13,6 +13,9 @@
 
 #include <LoRaMac.h>
 
+BUILD_ASSERT(!IS_ENABLED(CONFIG_LORAMAC_REGION_UNKNOWN),
+	     "Unknown region specified for LoRaWAN in Kconfig");
+
 #ifdef CONFIG_LORAMAC_REGION_AS923
 	#define LORAWAN_REGION LORAMAC_REGION_AS923
 #elif CONFIG_LORAMAC_REGION_AU915
@@ -33,8 +36,8 @@
 	#define LORAWAN_REGION LORAMAC_REGION_US915
 #elif CONFIG_LORAMAC_REGION_RU864
 	#define LORAWAN_REGION LORAMAC_REGION_RU864
-#elif
-	#error "Atleast one LoRaWAN region should be selected"
+#else
+	#error "At least one LoRaWAN region should be selected"
 #endif
 
 /* Use version 1.0.3.0 for ABP */
@@ -269,9 +272,10 @@ int lorawan_set_class(enum lorawan_class dev_class)
 	case LORAWAN_CLASS_A:
 		mib_req.Param.Class = CLASS_A;
 		break;
+	case LORAWAN_CLASS_B:
 	case LORAWAN_CLASS_C:
-		mib_req.Param.Class = CLASS_C;
-		break;
+		LOG_ERR("Region not supported yet!");
+		return -ENOTSUP;
 	default:
 		return -EINVAL;
 	};
@@ -318,7 +322,7 @@ int lorawan_set_conf_msg_tries(uint8_t tries)
 	return 0;
 }
 
-int lorawan_send(uint8_t port, uint8_t *data, uint8_t len, bool confirm)
+int lorawan_send(uint8_t port, uint8_t *data, uint8_t len, uint8_t flags)
 {
 	LoRaMacStatus_t status;
 	McpsReq_t mcpsReq;
@@ -349,19 +353,20 @@ int lorawan_send(uint8_t port, uint8_t *data, uint8_t len, bool confirm)
 		mcpsReq.Req.Unconfirmed.fBufferSize = 0;
 		mcpsReq.Req.Unconfirmed.Datarate = DR_0;
 	} else {
-		if (confirm == false) {
-			mcpsReq.Type = MCPS_UNCONFIRMED;
-			mcpsReq.Req.Unconfirmed.fPort = port;
-			mcpsReq.Req.Unconfirmed.fBuffer = data;
-			mcpsReq.Req.Unconfirmed.fBufferSize = len;
-			mcpsReq.Req.Unconfirmed.Datarate = lorawan_datarate;
-		} else {
+		if (flags & LORAWAN_MSG_CONFIRMED) {
 			mcpsReq.Type = MCPS_CONFIRMED;
 			mcpsReq.Req.Confirmed.fPort = port;
 			mcpsReq.Req.Confirmed.fBuffer = data;
 			mcpsReq.Req.Confirmed.fBufferSize = len;
 			mcpsReq.Req.Confirmed.NbTrials = lorawan_conf_msg_tries;
 			mcpsReq.Req.Confirmed.Datarate = lorawan_datarate;
+		} else {
+			/* default message type */
+			mcpsReq.Type = MCPS_UNCONFIRMED;
+			mcpsReq.Req.Unconfirmed.fPort = port;
+			mcpsReq.Req.Unconfirmed.fBuffer = data;
+			mcpsReq.Req.Unconfirmed.fBufferSize = len;
+			mcpsReq.Req.Unconfirmed.Datarate = lorawan_datarate;
 		}
 	}
 
@@ -382,7 +387,7 @@ int lorawan_send(uint8_t port, uint8_t *data, uint8_t len, bool confirm)
 	}
 
 	/* Wait for send confirmation */
-	if (confirm) {
+	if (flags & LORAWAN_MSG_CONFIRMED) {
 		/*
 		 * We can be sure that the semaphore will be released for
 		 * both success and failure cases after a specific time period.

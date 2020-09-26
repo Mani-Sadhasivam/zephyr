@@ -20,8 +20,6 @@ BUILD_ASSERT(DT_NODE_HAS_STATUS(DEFAULT_RADIO_NODE, okay),
 					  0xEE, 0xFF }
 #define LORAWAN_JOIN_EUI		{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,\
 					  0x00, 0x00 }
-#define LORAWAN_APP_EUI			{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,\
-					  0x00, 0x00 }
 #define LORAWAN_APP_KEY			{ 0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE,\
 					  0xD2, 0xA6, 0xAB, 0xF7, 0x15, 0x88,\
 					  0x09, 0xCF, 0x4F, 0x3C }
@@ -37,7 +35,7 @@ char data[] = {'h', 'e', 'l', 'l', 'o', 'w', 'o', 'r', 'l', 'd'};
 
 void main(void)
 {
-	struct device *lora_dev;
+	const struct device *lora_dev;
 	struct lorawan_join_config join_cfg;
 	uint8_t dev_eui[] = LORAWAN_DEV_EUI;
 	uint8_t join_eui[] = LORAWAN_JOIN_EUI;
@@ -71,7 +69,8 @@ void main(void)
 
 	LOG_INF("Sending data...");
 	while (1) {
-		ret = lorawan_send(2, data, sizeof(data), true);
+		ret = lorawan_send(2, data, sizeof(data),
+				   LORAWAN_MSG_CONFIRMED);
 
 		/*
 		 * Note: The stack may return -EAGAIN if the provided data

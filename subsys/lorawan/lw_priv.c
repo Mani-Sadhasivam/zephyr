@@ -40,7 +40,7 @@ static const char *const status2str[] = {
 	[LORAMAC_STATUS_ERROR] = "Unknown error",
 };
 
-const char *lorawan_status2str(int status)
+const char *lorawan_status2str(unsigned int status)
 {
 	if (status < ARRAY_SIZE(status2str)) {
 		return status2str[status];
@@ -71,7 +71,7 @@ static const char *const eventinfo2str[] = {
 	[LORAMAC_EVENT_INFO_STATUS_BEACON_NOT_FOUND] = "Beacon not found",
 };
 
-const char *lorawan_eventinfo2str(int status)
+const char *lorawan_eventinfo2str(unsigned int status)
 {
 	if (status < ARRAY_SIZE(eventinfo2str)) {
 		return eventinfo2str[status];
@@ -87,7 +87,7 @@ const char *lorawan_eventinfo2str(int status)
  * used as a general error code because those usually result from incorrect
  * configuration.
  */
-static const int status2errno[] = {
+static const unsigned int status2errno[] = {
 	[LORAMAC_STATUS_BUSY] = -EBUSY,
 	[LORAMAC_STATUS_SERVICE_UNKNOWN] = -ENOPROTOOPT,
 	[LORAMAC_STATUS_PARAMETER_INVALID] = -EINVAL,
@@ -112,7 +112,7 @@ static const int status2errno[] = {
 	[LORAMAC_STATUS_MC_GROUP_UNDEFINED] = -EINVAL,
 };
 
-const int lorawan_status2errno(int status)
+const int lorawan_status2errno(unsigned int status)
 {
 	if (status < ARRAY_SIZE(status2errno) && status2errno[status] != 0) {
 		return status2errno[status];
@@ -140,7 +140,7 @@ static const int eventinfo2errno[] = {
 	[LORAMAC_EVENT_INFO_STATUS_BEACON_NOT_FOUND] = -EINVAL,
 };
 
-const int lorawan_eventinfo2errno(int status)
+const int lorawan_eventinfo2errno(unsigned int status)
 {
 	if (status < ARRAY_SIZE(eventinfo2errno) &&
 	    eventinfo2errno[status] != 0) {
