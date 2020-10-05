@@ -102,7 +102,7 @@ struct lorawan_join_config {
 /**
  * @brief Join the LoRaWAN network
  *
- * Join the LoRaWAN network using either OTAA or AWB.
+ * Join the LoRaWAN network using OTAA or AWB.
  *
  * @param config Configuration to be used
  *

@@ -7,7 +7,7 @@
  */
 
 #include <device.h>
-#include <net/lorawan.h>
+#include <lorawan/lorawan.h>
 #include <zephyr.h>
 
 #define DEFAULT_RADIO_NODE DT_ALIAS(lora0)

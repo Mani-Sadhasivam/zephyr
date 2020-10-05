@@ -6,7 +6,7 @@
 
 #include <init.h>
 #include <errno.h>
-#include <net/lorawan.h>
+#include <lorawan/lorawan.h>
 #include <zephyr.h>
 
 #include "lw_priv.h"
@@ -132,6 +132,7 @@ static void MlmeConfirm(MlmeConfirm_t *mlmeConfirm)
 		break;
 	case MLME_LINK_CHECK:
 		/* Not implemented */
+		LOG_INF("Link check not implemented yet!");
 		break;
 	default:
 		break;
@@ -274,7 +275,7 @@ int lorawan_set_class(enum lorawan_class dev_class)
 		break;
 	case LORAWAN_CLASS_B:
 	case LORAWAN_CLASS_C:
-		LOG_ERR("Region not supported yet!");
+		LOG_ERR("Device class not supported yet!");
 		return -ENOTSUP;
 	default:
 		return -EINVAL;
@@ -339,11 +340,12 @@ int lorawan_send(uint8_t port, uint8_t *data, uint8_t len, uint8_t flags)
 	status = LoRaMacQueryTxPossible(len, &txInfo);
 	if (status != LORAMAC_STATUS_OK) {
 		/*
-		 * If this returns false, then most likely the payload has
-		 * exceeded the maximum possible length for the current region
-		 * and datarate. We can't do much other than sending empty
-		 * frame in order to flush MAC commands in stack and hoping the
-		 * application to lower the payload size for next try.
+		 * If status indicates an error, then most likely the payload
+		 * has exceeded the maximum possible length for the current
+		 * region and datarate. We can't do much other than sending
+		 * empty frame in order to flush MAC commands in stack and
+		 * hoping the application to lower the payload size for
+		 * next try.
 		 */
 		LOG_ERR("LoRaWAN Query Tx Possible Failed: %s",
 			lorawan_status2str(status));
@@ -378,8 +380,8 @@ int lorawan_send(uint8_t port, uint8_t *data, uint8_t len, uint8_t flags)
 	}
 
 	/*
-	 * Indicate the application that the current packet is not sent and
-	 * it has to resend the packet
+	 * Indicate to the application that the current packet is not sent and
+	 * it has to resend the packet.
 	 */
 	if (empty_frame) {
 		ret = -EAGAIN;
@@ -429,7 +431,7 @@ int lorawan_start(void)
 	return 0;
 }
 
-static int lorawan_init(struct device *dev)
+static int lorawan_init(const struct device *dev)
 {
 	LoRaMacStatus_t status;
 

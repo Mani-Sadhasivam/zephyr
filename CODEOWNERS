@@ -353,9 +353,9 @@
 /include/linker/app_smem*.ld              @andrewboie
 /include/linker/                          @andrewboie @andyross
 /include/logging/                         @nordic-krch
+/include/lorawan/lorawan.h                @Mani-Sadhasivam
 /include/net/                             @jukkar @tbursztyka @pfalcon
 /include/net/buf.h                        @jukkar @jhedberg @tbursztyka @pfalcon
-/include/net/lorawan.h                    @Mani-Sadhasivam
 /include/posix/                           @pfalcon
 /include/power/power.h                    @wentongwu @nashif
 /include/ptp_clock.h                      @jukkar

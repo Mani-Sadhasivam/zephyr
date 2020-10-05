@@ -87,7 +87,7 @@ const char *lorawan_eventinfo2str(unsigned int status)
  * used as a general error code because those usually result from incorrect
  * configuration.
  */
-static const unsigned int status2errno[] = {
+static const int status2errno[] = {
 	[LORAMAC_STATUS_BUSY] = -EBUSY,
 	[LORAMAC_STATUS_SERVICE_UNKNOWN] = -ENOPROTOOPT,
 	[LORAMAC_STATUS_PARAMETER_INVALID] = -EINVAL,
