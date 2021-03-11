@@ -112,13 +112,29 @@ static inline void spi_context_release(struct spi_context *ctx, int status)
 static inline int spi_context_wait_for_completion(struct spi_context *ctx)
 {
 	int status = 0;
+	uint64_t ms;
+
+	ms = MAX(ctx->tx_len, ctx->rx_len) * 8 * 1000 / ctx->config->frequency;
+	ms += 200; /* tolerance */
+
+	if (ms > UINT_MAX)
+		ms = UINT_MAX;
+
 #ifdef CONFIG_SPI_ASYNC
 	if (!ctx->asynchronous) {
-		k_sem_take(&ctx->sync, K_FOREVER);
+		if (k_sem_take(&ctx->sync, K_MSEC(ms))) {
+			LOG_ERR("Timeout waiting for transfer complete");
+			status = -ETIMEDOUT;
+			goto out;
+		}
 		status = ctx->sync_status;
 	}
 #else
-	k_sem_take(&ctx->sync, K_FOREVER);
+	if (k_sem_take(&ctx->sync, K_MSEC(ms))) {
+		LOG_ERR("Timeout waiting for transfer complete");
+		status = -ETIMEDOUT;
+		goto out;
+	}
 	status = ctx->sync_status;
 #endif /* CONFIG_SPI_ASYNC */
 
@@ -128,6 +144,7 @@ static inline int spi_context_wait_for_completion(struct spi_context *ctx)
 	}
 #endif /* CONFIG_SPI_SLAVE */
 
+out:
 	return status;
 }
 
